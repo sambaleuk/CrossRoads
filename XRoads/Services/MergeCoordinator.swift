@@ -60,6 +60,9 @@ actor MergeCoordinator {
 
         try await gitService.checkout(branch: plan.baseBranch, repoPath: repoPath.path)
 
+        // Capture base HEAD before any merges so we can fully roll back on partial failure
+        let baseHeadBefore = try await gitService.getCurrentCommitHash(repoPath: repoPath.path)
+
         var mergedBranches: [String] = []
         var conflicts: [MergeConflict] = []
         var rolledBack = false
@@ -93,7 +96,11 @@ actor MergeCoordinator {
                         message: stderr
                     )
                 )
+                // Abort the in-progress merge, then reset base to its pre-merge state
+                // to undo any branches already committed in this execution.
                 try? await gitService.abortMerge(repoPath: repoPath.path)
+                try? await gitService.resetHard(repoPath: repoPath.path, reference: baseHeadBefore)
+                mergedBranches.removeAll()
                 rolledBack = true
                 break
             }

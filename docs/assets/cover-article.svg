@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 600" font-family="'SF Mono', 'Fira Code', 'Cascadia Code', monospace">
+  <defs>
+    <!-- Gradients for the three rivers -->
+    <linearGradient id="river-blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#3b82f6" stop-opacity="0.6"/>
+      <stop offset="70%" stop-color="#60a5fa" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#93c5fd" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="river-gold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#eab308" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#eab308" stop-opacity="0.6"/>
+      <stop offset="70%" stop-color="#fbbf24" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#fde68a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="river-green" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#22c55e" stop-opacity="0.6"/>
+      <stop offset="70%" stop-color="#4ade80" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#86efac" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Nexus radial glow -->
+    <radialGradient id="nexus-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0.8"/>
+      <stop offset="30%" stop-color="#a78bfa" stop-opacity="0.4"/>
+      <stop offset="60%" stop-color="#7c3aed" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Delta glow -->
+    <radialGradient id="delta-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3"/>
+      <stop offset="40%" stop-color="#c084fc" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#0a0e17" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Filters -->
+    <filter id="glow-soft" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-strong" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-text" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="blur-bg" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+  </defs>
+
+  <!-- ====== BACKGROUND ====== -->
+  <rect width="1500" height="600" fill="#060911"/>
+
+  <!-- Subtle grid (fading at edges) -->
+  <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#0f1729" stroke-width="0.5"/>
+  </pattern>
+  <rect width="1500" height="600" fill="url(#grid)" opacity="0.7"/>
+
+  <!-- Atmospheric depth — faint horizontal bands -->
+  <rect x="0" y="200" width="1500" height="200" fill="#0a0e17" opacity="0.4"/>
+
+  <!-- ====== THE THREE RIVERS (left → convergence point) ====== -->
+
+  <!-- River 1: BLUE (Claude) — top flow -->
+  <path d="M -20 140 C 150 140, 200 155, 340 170 C 480 185, 550 175, 660 190 C 770 205, 820 230, 870 260 C 920 290, 940 300, 950 305"
+        fill="none" stroke="#3b82f6" stroke-width="3" opacity="0.7" filter="url(#glow-soft)"/>
+  <path d="M -20 140 C 150 140, 200 155, 340 170 C 480 185, 550 175, 660 190 C 770 205, 820 230, 870 260 C 920 290, 940 300, 950 305"
+        fill="none" stroke="#60a5fa" stroke-width="1.2" opacity="0.9"/>
+  <!-- Blue sediment particles -->
+  <circle cx="120" cy="143" r="1.5" fill="#60a5fa" opacity="0.6"/>
+  <circle cx="280" cy="163" r="1" fill="#93c5fd" opacity="0.5"/>
+  <circle cx="440" cy="180" r="2" fill="#3b82f6" opacity="0.7"/>
+  <circle cx="580" cy="183" r="1.2" fill="#60a5fa" opacity="0.5"/>
+  <circle cx="720" cy="198" r="1.8" fill="#93c5fd" opacity="0.6"/>
+  <circle cx="830" cy="240" r="1.5" fill="#60a5fa" opacity="0.7"/>
+
+  <!-- River 2: GOLD (Gemini) — middle flow -->
+  <path d="M -20 300 C 120 300, 200 295, 340 290 C 480 285, 580 295, 680 300 C 780 305, 860 305, 950 305"
+        fill="none" stroke="#eab308" stroke-width="3.5" opacity="0.7" filter="url(#glow-soft)"/>
+  <path d="M -20 300 C 120 300, 200 295, 340 290 C 480 285, 580 295, 680 300 C 780 305, 860 305, 950 305"
+        fill="none" stroke="#fbbf24" stroke-width="1.2" opacity="0.9"/>
+  <!-- Gold sediment particles -->
+  <circle cx="100" cy="299" r="1.8" fill="#fbbf24" opacity="0.6"/>
+  <circle cx="250" cy="294" r="1.2" fill="#fde68a" opacity="0.5"/>
+  <circle cx="420" cy="287" r="2" fill="#eab308" opacity="0.7"/>
+  <circle cx="560" cy="293" r="1.5" fill="#fbbf24" opacity="0.5"/>
+  <circle cx="730" cy="303" r="1.8" fill="#fde68a" opacity="0.6"/>
+  <circle cx="880" cy="305" r="1.2" fill="#fbbf24" opacity="0.7"/>
+
+  <!-- River 3: GREEN (Codex) — bottom flow -->
+  <path d="M -20 460 C 150 460, 200 445, 340 430 C 480 415, 550 425, 660 410 C 770 395, 820 370, 870 345 C 920 320, 940 310, 950 305"
+        fill="none" stroke="#22c55e" stroke-width="3" opacity="0.7" filter="url(#glow-soft)"/>
+  <path d="M -20 460 C 150 460, 200 445, 340 430 C 480 415, 550 425, 660 410 C 770 395, 820 370, 870 345 C 920 320, 940 310, 950 305"
+        fill="none" stroke="#4ade80" stroke-width="1.2" opacity="0.9"/>
+  <!-- Green sediment particles -->
+  <circle cx="130" cy="458" r="1.5" fill="#4ade80" opacity="0.6"/>
+  <circle cx="290" cy="437" r="1" fill="#86efac" opacity="0.5"/>
+  <circle cx="460" cy="420" r="2" fill="#22c55e" opacity="0.7"/>
+  <circle cx="600" cy="417" r="1.2" fill="#4ade80" opacity="0.5"/>
+  <circle cx="740" cy="402" r="1.8" fill="#86efac" opacity="0.6"/>
+  <circle cx="840" cy="357" r="1.5" fill="#4ade80" opacity="0.7"/>
+
+  <!-- ====== THE NEXUS — CONVERGENCE POINT ====== -->
+
+  <!-- Deep glow behind nexus -->
+  <circle cx="950" cy="305" r="120" fill="url(#nexus-glow)" filter="url(#blur-bg)"/>
+  <circle cx="950" cy="305" r="60" fill="url(#delta-glow)"/>
+
+  <!-- Nexus core -->
+  <circle cx="950" cy="305" r="8" fill="#e2e8f0" opacity="0.9" filter="url(#glow-strong)"/>
+  <circle cx="950" cy="305" r="4" fill="#ffffff" opacity="1"/>
+
+  <!-- Ripple rings from nexus -->
+  <circle cx="950" cy="305" r="20" fill="none" stroke="#c084fc" stroke-width="0.8" opacity="0.4"/>
+  <circle cx="950" cy="305" r="35" fill="none" stroke="#a78bfa" stroke-width="0.5" opacity="0.25"/>
+  <circle cx="950" cy="305" r="55" fill="none" stroke="#8b5cf6" stroke-width="0.4" opacity="0.15"/>
+
+  <!-- ====== OUTPUT — Single merged river flowing right ====== -->
+  <path d="M 950 305 C 1000 305, 1050 300, 1120 300 C 1200 300, 1300 300, 1520 300"
+        fill="none" stroke="#c084fc" stroke-width="4" opacity="0.5" filter="url(#glow-soft)"/>
+  <path d="M 950 305 C 1000 305, 1050 300, 1120 300 C 1200 300, 1300 300, 1520 300"
+        fill="none" stroke="#e2d4f5" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Merged sediment — carrying all three colors -->
+  <circle cx="1020" cy="303" r="1.5" fill="#60a5fa" opacity="0.5"/>
+  <circle cx="1080" cy="301" r="1.2" fill="#fbbf24" opacity="0.5"/>
+  <circle cx="1140" cy="300" r="1.8" fill="#4ade80" opacity="0.5"/>
+  <circle cx="1220" cy="300" r="1" fill="#c084fc" opacity="0.6"/>
+  <circle cx="1310" cy="300" r="1.5" fill="#e2d4f5" opacity="0.4"/>
+  <circle cx="1400" cy="300" r="1.2" fill="#c084fc" opacity="0.3"/>
+
+  <!-- ====== AGENT LABELS (source of each river) ====== -->
+  <text x="40" y="130" fill="#3b82f6" font-size="10" opacity="0.6" letter-spacing="2">CLAUDE</text>
+  <text x="40" y="294" fill="#eab308" font-size="10" opacity="0.6" letter-spacing="2">GEMINI</text>
+  <text x="40" y="454" fill="#22c55e" font-size="10" opacity="0.6" letter-spacing="2">CODEX</text>
+
+  <!-- ====== POETIC TYPOGRAPHY ====== -->
+
+  <!-- Main title -->
+  <text x="1220" y="120" text-anchor="middle" fill="#e2e8f0" font-size="30" font-weight="700" letter-spacing="1" filter="url(#glow-text)" font-family="'Georgia', 'Times New Roman', serif">
+    There is no autopilot
+  </text>
+  <text x="1220" y="158" text-anchor="middle" fill="#94a3b8" font-size="30" font-weight="700" letter-spacing="1" font-family="'Georgia', 'Times New Roman', serif">
+    for architecture.
+  </text>
+
+  <!-- Subtitle / poetic tagline -->
+  <text x="1220" y="205" text-anchor="middle" fill="#64748b" font-size="12" letter-spacing="2">
+    THREE RIVERS. ONE DELTA. ZERO DECAY.
+  </text>
+
+  <!-- XRoads wordmark -->
+  <text x="1220" y="480" text-anchor="middle" fill="#334155" font-size="14" letter-spacing="6" font-weight="600">XROADS</text>
+  <line x1="1160" y1="490" x2="1280" y2="490" stroke="#1e293b" stroke-width="0.8"/>
+  <text x="1220" y="510" text-anchor="middle" fill="#1e293b" font-size="9" letter-spacing="3">MULTI-AGENT ORCHESTRATION</text>
+
+  <!-- Faint code fragments drifting in the background -->
+  <text x="160" y="210" fill="#1a2744" font-size="9" opacity="0.5" transform="rotate(-3 160 210)">git worktree add</text>
+  <text x="380" y="350" fill="#1a2744" font-size="8" opacity="0.4" transform="rotate(2 380 350)">prd.json</text>
+  <text x="520" y="240" fill="#1a2744" font-size="9" opacity="0.3" transform="rotate(-1 520 240)">status: "complete"</text>
+  <text x="200" y="400" fill="#1a2744" font-size="8" opacity="0.4" transform="rotate(1 200 400)">fresh context</text>
+  <text x="700" y="150" fill="#1a2744" font-size="8" opacity="0.3" transform="rotate(-2 700 150)">sync_prd_to_status()</text>
+  <text x="650" y="450" fill="#1a2744" font-size="9" opacity="0.35" transform="rotate(1 650 450)">exit 0</text>
+  <text x="300" y="500" fill="#1a2744" font-size="8" opacity="0.3" transform="rotate(-1 300 500)">convergence</text>
+  <text x="800" y="120" fill="#1a2744" font-size="8" opacity="0.25">--print</text>
+
+  <!-- Bottom-left poetic whisper -->
+  <text x="60" y="565" fill="#1e293b" font-size="11" font-family="'Georgia', 'Times New Roman', serif" font-style="italic">
+    "ma bouche sera la bouche des malheurs qui n'ont point de bouche"
+  </text>
+  <text x="60" y="582" fill="#1a2035" font-size="9" letter-spacing="1">
+    -- Cahier d'un retour au pays natal
+  </text>
+
+</svg>

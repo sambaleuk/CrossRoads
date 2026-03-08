@@ -130,6 +130,12 @@ actor GitService {
 
     // MARK: - Branch Operations
 
+    /// Gets the full commit hash of HEAD for a repository
+    func getCurrentCommitHash(repoPath: String) async throws -> String {
+        let output = try await runGit(arguments: ["rev-parse", "HEAD"], currentDirectory: repoPath)
+        return output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Gets the current branch name for a path
     /// - Parameter path: Path to repository or worktree
     /// - Returns: Current branch name
