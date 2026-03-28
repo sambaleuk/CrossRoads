@@ -3,7 +3,9 @@ import SwiftUI
 // MARK: - CockpitModeView
 
 /// Main Cockpit Mode panel. Shows session status, slot cards with sequential
-/// reveal animation, and Pause/Resume/Close controls.
+/// reveal animation, Chairman Feed sidebar, and Pause/Resume/Close controls.
+///
+/// US-004: Added Chairman Feed panel and per-slot chat integration.
 struct CockpitModeView: View {
     @Bindable var viewModel: CockpitViewModel
 
@@ -16,11 +18,22 @@ struct CockpitModeView: View {
 
             Divider()
 
-            // Slot cards grid
+            // Main content: slots + chairman feed
             if viewModel.slots.isEmpty && !viewModel.isLoading {
                 emptyState
             } else {
-                slotsList
+                HStack(alignment: .top, spacing: 0) {
+                    // Slot cards (main area)
+                    slotsList
+                        .frame(maxWidth: .infinity)
+
+                    Divider()
+
+                    // Chairman Feed sidebar
+                    ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
+                        .frame(width: 280)
+                        .padding(Theme.Spacing.sm)
+                }
             }
         }
         .background(Color.bgCanvas)
@@ -122,11 +135,14 @@ struct CockpitModeView: View {
         ScrollView {
             LazyVStack(spacing: Theme.Spacing.sm) {
                 ForEach(viewModel.slots, id: \.id) { slot in
-                    CockpitSlotCardView(
-                        slot: slot,
-                        skillName: skillName(for: slot),
-                        isRevealed: viewModel.revealedSlotIds.contains(slot.id)
-                    )
+                    if let chatVM = viewModel.chatViewModels[slot.id] {
+                        CockpitSlotCardView(
+                            slot: slot,
+                            skillName: skillName(for: slot),
+                            isRevealed: viewModel.revealedSlotIds.contains(slot.id),
+                            chatViewModel: chatVM
+                        )
+                    }
                 }
             }
             .padding(Theme.Spacing.md)
@@ -172,7 +188,6 @@ struct CockpitModeView: View {
     }
 
     private func skillName(for slot: AgentSlot) -> String {
-        // Use branch name as skill hint when skill lookup isn't available
         slot.branchName?.components(separatedBy: "/").last ?? "slot-\(slot.slotIndex)"
     }
 }
@@ -182,7 +197,6 @@ struct CockpitModeView: View {
 #if DEBUG
 struct CockpitModeView_Previews: PreviewProvider {
     static var previews: some View {
-        // Preview requires mock setup — show empty state
         Text("CockpitModeView requires DI setup for preview")
             .foregroundStyle(Color.textTertiary)
             .frame(width: 300, height: 400)

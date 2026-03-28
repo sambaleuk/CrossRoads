@@ -3,15 +3,53 @@ import SwiftUI
 // MARK: - CockpitSlotCardView
 
 /// Displays a single agent slot card within the Cockpit Mode panel.
-/// Shows: skill name, agent type, status badge, and current task.
+/// Shows: skill name, agent type, status badge, unread message count, and expandable chat panel.
+///
+/// US-004: Added expandable chat panel and unread badge.
 struct CockpitSlotCardView: View {
     let slot: AgentSlot
     let skillName: String
     let isRevealed: Bool
+    @Bindable var chatViewModel: SlotChatViewModel
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Card header (clickable to toggle chat)
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    chatViewModel.isExpanded.toggle()
+                    if chatViewModel.isExpanded {
+                        chatViewModel.markAllAsRead()
+                    }
+                }
+            } label: {
+                cardContent
+            }
+            .buttonStyle(.plain)
+
+            // Expandable chat panel
+            if chatViewModel.isExpanded {
+                SlotChatPanelView(viewModel: chatViewModel)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .background(Color.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.md)
+                .stroke(statusBorderColor.opacity(0.4), lineWidth: 1)
+        )
+        .opacity(isRevealed ? 1 : 0)
+        .offset(y: isRevealed ? 0 : 20)
+        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isRevealed)
+    }
+
+    // MARK: - Card Content
+
+    @ViewBuilder
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            // Header: slot index + agent type + status
+            // Header: slot index + agent type + status + unread badge
             HStack {
                 // Slot index badge
                 Text("#\(slot.slotIndex)")
@@ -30,8 +68,24 @@ struct CockpitSlotCardView: View {
 
                 Spacer()
 
+                // Unread badge
+                if chatViewModel.unreadCount > 0 && !chatViewModel.isExpanded {
+                    Text("\(chatViewModel.unreadCount)")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.accentPrimary)
+                        .clipShape(Capsule())
+                }
+
                 // Status badge
                 cockpitStatusBadge
+
+                // Expand indicator
+                Image(systemName: chatViewModel.isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.textTertiary)
             }
 
             // Agent type
@@ -58,15 +112,6 @@ struct CockpitSlotCardView: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .background(Color.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.md)
-                .stroke(statusBorderColor.opacity(0.4), lineWidth: 1)
-        )
-        .opacity(isRevealed ? 1 : 0)
-        .offset(y: isRevealed ? 0 : 20)
-        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: isRevealed)
     }
 
     // MARK: - Status Badge
@@ -139,32 +184,10 @@ struct CockpitSlotCardView: View {
 #if DEBUG
 struct CockpitSlotCardView_Previews: PreviewProvider {
     static var previews: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            CockpitSlotCardView(
-                slot: AgentSlot(
-                    cockpitSessionId: UUID(),
-                    slotIndex: 0,
-                    status: .running,
-                    agentType: "claude",
-                    branchName: "feat/api"
-                ),
-                skillName: "backend-dev",
-                isRevealed: true
-            )
-            CockpitSlotCardView(
-                slot: AgentSlot(
-                    cockpitSessionId: UUID(),
-                    slotIndex: 1,
-                    status: .paused,
-                    agentType: "gemini",
-                    branchName: "feat/ui"
-                ),
-                skillName: "frontend-dev",
-                isRevealed: true
-            )
-        }
-        .padding()
-        .background(Color.bgApp)
+        Text("CockpitSlotCardView requires DI setup for preview")
+            .foregroundStyle(Color.textTertiary)
+            .frame(width: 300, height: 200)
+            .background(Color.bgApp)
     }
 }
 #endif

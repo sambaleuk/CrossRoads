@@ -2785,3 +2785,20 @@ Acceptance Criteria Met:
   - Brief includes all required fields (status, blockers, decisions, action items)
   - Debounce prevents too-frequent synthesis
 - Build: swift build PASS
+
+### Iteration 4 - US-004 (Cockpit UI — chat panel per slot + Chairman feed display)
+- Created SlotChatViewModel (@Observable, @MainActor): per-slot message loading, AsyncStream subscription, unread count tracking, user stdin injection via ProcessRunner, message publishing to bus
+- Created SlotChatPanelView: expandable chat panel with message history (ScrollView + LazyVStack), MessageBubbleView with type-colored badges and timestamps, text input bar with submit-on-enter
+- Created ChairmanFeedPanelView: right sidebar displaying chairman_brief from CockpitSession, auto-refreshes via @Observable binding to CockpitViewModel.chairmanBrief
+- Updated CockpitSlotCardView: added expandable chat panel toggle (chevron up/down), unread message count badge (Capsule), chat panel collapses/expands with spring animation
+- Updated CockpitModeView: HStack layout with slot cards (main area) + ChairmanFeedPanelView sidebar (280pt), passes chatViewModels from CockpitViewModel to each slot card
+- Updated CockpitViewModel: added bus/ptyRunner dependencies, chatViewModels dictionary keyed by slot ID, chairmanBrief computed from session, chairman brief polling task (3s interval), cleanup on close
+- Test file: XRoadsTests/CockpitChatPanelTests.swift — 6 tests, 0 failures
+  - test_loadMessages_filteredBySlot: messages correctly filtered by slot ID
+  - test_unreadBadgeCount: unread count matches, markAllAsRead resets to 0
+  - test_sendMessage_publishesToBus: user message published, input cleared
+  - test_chairmanBrief_refreshOnSessionUpdate: brief updates persisted and fetchable
+  - test_startListening_receivesNewMessages: real-time message via AsyncStream
+  - test_sendMessage_ignoresEmptyInput: whitespace-only input rejected
+- Build: swift build PASS
+- All 4 PRD user stories complete. PRD status: complete.

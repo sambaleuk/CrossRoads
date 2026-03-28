@@ -3,8 +3,10 @@ import os
 
 // MARK: - CockpitViewModel
 
-/// Drives the Cockpit Mode UI. Manages session lifecycle and slot display state.
-/// Uses @Observable for SwiftUI reactivity (requires macOS 14+).
+/// Drives the Cockpit Mode UI. Manages session lifecycle, slot display state,
+/// per-slot chat view models, and Chairman brief observation.
+///
+/// US-004: Added chatViewModels, chairmanBrief, and chairman feed subscription.
 @MainActor
 @Observable
 final class CockpitViewModel {
@@ -26,6 +28,14 @@ final class CockpitViewModel {
     /// Error message to display
     var errorMessage: String?
 
+    /// Per-slot chat view models, keyed by slot ID
+    var chatViewModels: [UUID: SlotChatViewModel] = [:]
+
+    /// Latest chairman brief text, auto-refreshed from session
+    var chairmanBrief: String? {
+        session?.chairmanBrief
+    }
+
     /// Convenience: session status or .idle when no session
     var sessionStatus: CockpitSessionStatus {
         session?.status ?? .idle
@@ -42,23 +52,32 @@ final class CockpitViewModel {
     private let lifecycleManager: CockpitLifecycleManager
     private let conductorService: ConductorService
     private let repository: CockpitSessionRepository
+    private let bus: MessageBusService
+    private let ptyRunner: ProcessRunner?
     private let logger = Logger(subsystem: "com.xroads", category: "CockpitVM")
+
+    /// Task for chairman brief polling
+    private var chairmanBriefTask: Task<Void, Never>?
 
     // MARK: - Init
 
     init(
         lifecycleManager: CockpitLifecycleManager,
         conductorService: ConductorService,
-        repository: CockpitSessionRepository
+        repository: CockpitSessionRepository,
+        bus: MessageBusService,
+        ptyRunner: ProcessRunner? = nil
     ) {
         self.lifecycleManager = lifecycleManager
         self.conductorService = conductorService
         self.repository = repository
+        self.bus = bus
+        self.ptyRunner = ptyRunner
     }
 
     // MARK: - Activate Cockpit Mode
 
-    /// Starts the full cockpit activation flow: idle → initializing → active.
+    /// Starts the full cockpit activation flow: idle -> initializing -> active.
     /// Sequential slot reveal animation is driven by `revealedSlotIds`.
     func activate(projectPath: String) async {
         guard !isLoading else { return }
@@ -72,11 +91,11 @@ final class CockpitViewModel {
             )
             session = newSession
 
-            // Step 2: Activate (idle → initializing) with context reading
+            // Step 2: Activate (idle -> initializing) with context reading
             let (initializing, chairmanInput) = try await lifecycleManager.activate(session: newSession)
             session = initializing
 
-            // Step 3: Conductor deliberation (initializing → active)
+            // Step 3: Conductor deliberation (initializing -> active)
             let (activeSession, assignedSlots) = try await conductorService.conductSlotAssignment(
                 session: initializing,
                 chairmanInput: chairmanInput
@@ -84,8 +103,14 @@ final class CockpitViewModel {
             session = activeSession
             slots = assignedSlots
 
-            // Step 4: Sequential slot reveal animation (500ms between each)
+            // Step 4: Create chat view models for each slot
+            buildChatViewModels(for: assignedSlots)
+
+            // Step 5: Sequential slot reveal animation (500ms between each)
             await revealSlotsSequentially(assignedSlots)
+
+            // Step 6: Start chairman brief refresh loop
+            startChairmanBriefRefresh()
 
             isLoading = false
             logger.info("Cockpit activated with \(assignedSlots.count) slots")
@@ -97,7 +122,7 @@ final class CockpitViewModel {
         }
     }
 
-    // MARK: - Pause (active → paused)
+    // MARK: - Pause (active -> paused)
 
     /// Pauses the cockpit session and all agent slots.
     func pause() async {
@@ -128,7 +153,7 @@ final class CockpitViewModel {
         }
     }
 
-    // MARK: - Resume (paused → active)
+    // MARK: - Resume (paused -> active)
 
     /// Resumes the cockpit session and all paused agent slots.
     func resume() async {
@@ -159,7 +184,7 @@ final class CockpitViewModel {
         }
     }
 
-    // MARK: - Close (active|paused → closed)
+    // MARK: - Close (active|paused -> closed)
 
     /// Closes the cockpit session and terminates all slots.
     func close() async {
@@ -171,6 +196,14 @@ final class CockpitViewModel {
             session = closed
             slots = []
             revealedSlotIds = []
+
+            // Cleanup chat view models and chairman refresh
+            for (_, chatVM) in chatViewModels {
+                chatVM.stopListening()
+            }
+            chatViewModels = [:]
+            chairmanBriefTask?.cancel()
+            chairmanBriefTask = nil
 
             logger.info("Cockpit session closed")
         } catch {
@@ -189,13 +222,54 @@ final class CockpitViewModel {
                 slots = try await repository.fetchSlots(sessionId: existing.id)
                 // All existing slots are already revealed
                 revealedSlotIds = Set(slots.map(\.id))
+                // Build chat view models for loaded slots
+                buildChatViewModels(for: slots)
+                // Start chairman brief refresh
+                startChairmanBriefRefresh()
             }
         } catch {
             logger.error("Failed to load existing session: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Private
+    // MARK: - Private: Chat View Models
+
+    /// Creates a SlotChatViewModel for each slot and stores in chatViewModels.
+    private func buildChatViewModels(for assignedSlots: [AgentSlot]) {
+        for slot in assignedSlots {
+            let chatVM = SlotChatViewModel(
+                slot: slot,
+                bus: bus,
+                ptyRunner: ptyRunner
+            )
+            chatViewModels[slot.id] = chatVM
+        }
+    }
+
+    // MARK: - Private: Chairman Brief Refresh
+
+    /// Polls CockpitSession.chairmanBrief from the database every 3 seconds
+    /// to detect updates from ChairmanFeedService.
+    private func startChairmanBriefRefresh() {
+        chairmanBriefTask?.cancel()
+        chairmanBriefTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, let sessionId = self.session?.id else { break }
+                do {
+                    if let refreshed = try await self.repository.fetchSession(id: sessionId) {
+                        if refreshed.chairmanBrief != self.session?.chairmanBrief {
+                            self.session?.chairmanBrief = refreshed.chairmanBrief
+                        }
+                    }
+                } catch {
+                    // Non-fatal: chairman brief refresh failure
+                }
+            }
+        }
+    }
+
+    // MARK: - Private: Slot Reveal
 
     /// Reveals slots one by one with a spring animation delay.
     private func revealSlotsSequentially(_ slotsToReveal: [AgentSlot]) async {
