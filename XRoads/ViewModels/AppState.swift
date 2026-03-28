@@ -73,6 +73,14 @@ final class AppState {
     /// State of the GitMaster intelligent resolver
     var gitMasterState: GitMasterState = GitMasterState()
 
+    // MARK: - Cockpit Mode State (US-004)
+
+    /// Whether the cockpit panel is visible
+    var showCockpitPanel: Bool = false
+
+    /// Cockpit view model (created lazily when cockpit mode is first activated)
+    var cockpitViewModel: CockpitViewModel?
+
     // MARK: - Delegating Properties (backward compatibility)
     // These forward to sub-states so existing view code continues to work.
     // Views should migrate to appState.dashboard.*, appState.dispatch.*, appState.orchestration.* over time.

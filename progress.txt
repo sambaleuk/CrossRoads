@@ -2660,3 +2660,56 @@ Acceptance Criteria Met:
 
 - Build: swift build PASS
 - State machine compliance: CockpitLifecycle.slots_assigned transition fully implemented with guard + action
+
+### Iteration 4 — US-004 (Cockpit Mode UI — activation button and session status display)
+
+#### What was done
+- Extended CockpitLifecycleManager with pause(), resume(), close() transitions matching states.json
+  - pause: active → paused (action: suspend_all_slots)
+  - resume: paused → active (action: resume_all_slots)
+  - close: active|paused → closed (guard: no_pending_gates from active, action: terminate_all_slots)
+- Created CockpitViewModel (@Observable, @MainActor) driving UI state:
+  - Full activation flow: idle → initializing → active with sequential slot reveal
+  - Pause/Resume/Close session controls with slot status propagation
+  - Load existing session support for app restart persistence
+- Created CockpitSlotCardView: slot card with skill name, agent type icon, status badge, branch
+  - Spring animation for sequential reveal (500ms between each slot)
+  - Status-colored borders and badges per AgentSlotStatus
+- Created CockpitModeView: session header + controls + scrollable slot card list
+  - Pause/Resume/Close buttons shown contextually based on session status
+  - Loading indicator during activation
+  - Empty state with error display
+- Integrated into MainWindowView:
+  - Cockpit Mode toolbar button (⌘⇧C) with dynamic icon based on active state
+  - CockpitModeView panel (300px) between dashboard and right sidebar
+  - showCockpitPanel + cockpitViewModel added to AppState
+
+#### Files created
+- XRoads/ViewModels/CockpitViewModel.swift
+- XRoads/Views/Cockpit/CockpitModeView.swift
+- XRoads/Views/Cockpit/CockpitSlotCardView.swift
+- XRoadsTests/CockpitModeViewTests.swift
+
+#### Files modified
+- XRoads/Services/CockpitLifecycleManager.swift (added pause/resume/close)
+- XRoads/ViewModels/AppState.swift (added cockpit state)
+- XRoads/Views/MainWindowView.swift (toolbar button + panel integration)
+
+#### Test results: CockpitModeViewTests — 9/9 pass
+- test_pause_transitionsActiveSessionToPaused ✓
+- test_resume_transitionsPausedSessionToActive ✓
+- test_pause_rejectsFromIdleState ✓
+- test_resume_rejectsFromActiveState ✓
+- test_pause_setsAllRunningSlotsToPaused ✓
+- test_close_fromActiveState ✓
+- test_close_fromPausedState ✓
+- test_close_blockedByPendingGatesFromActive ✓
+- test_slotCardDisplaysCorrectData ✓
+
+#### Regressions: None
+- US-001 (CockpitSessionRepositoryTests): unchanged
+- US-002 (ProjectContextReaderTests): unchanged
+- US-003 (ConductorTests): unchanged
+
+- Build: swift build PASS
+- State machine compliance: CockpitLifecycle.pause and CockpitLifecycle.resume transitions fully implemented

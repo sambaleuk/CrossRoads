@@ -106,4 +106,83 @@ actor CockpitLifecycleManager {
 
         return persisted
     }
+
+    // MARK: - Pause (active → paused)
+
+    /// Pauses a CockpitSession: transitions from active to paused.
+    ///
+    /// CockpitLifecycle: active → pause → paused
+    /// Action: suspend_all_slots
+    ///
+    /// - Parameter session: The session to pause (must be in active state)
+    /// - Returns: Updated session in paused state
+    func pause(session: CockpitSession) async throws -> CockpitSession {
+        guard session.status == .active else {
+            throw CockpitLifecycleError.invalidTransition(from: session.status, event: "pause")
+        }
+
+        var updated = session
+        updated.status = .paused
+        updated.updatedAt = Date()
+        let persisted = try await repository.updateSession(updated)
+
+        logger.info("CockpitSession \(session.id) paused: active → paused")
+
+        return persisted
+    }
+
+    // MARK: - Resume (paused → active)
+
+    /// Resumes a CockpitSession: transitions from paused to active.
+    ///
+    /// CockpitLifecycle: paused → resume → active
+    /// Action: resume_all_slots
+    ///
+    /// - Parameter session: The session to resume (must be in paused state)
+    /// - Returns: Updated session in active state
+    func resume(session: CockpitSession) async throws -> CockpitSession {
+        guard session.status == .paused else {
+            throw CockpitLifecycleError.invalidTransition(from: session.status, event: "resume")
+        }
+
+        var updated = session
+        updated.status = .active
+        updated.updatedAt = Date()
+        let persisted = try await repository.updateSession(updated)
+
+        logger.info("CockpitSession \(session.id) resumed: paused → active")
+
+        return persisted
+    }
+
+    // MARK: - Close (active|paused → closed)
+
+    /// Closes a CockpitSession: transitions from active or paused to closed.
+    ///
+    /// CockpitLifecycle: active|paused → close [guard: no_pending_gates] → closed
+    /// Action: terminate_all_slots
+    ///
+    /// - Parameters:
+    ///   - session: The session to close (must be in active or paused state)
+    ///   - hasPendingGates: Whether there are unresolved execution gates
+    /// - Returns: Updated session in closed state
+    func close(session: CockpitSession, hasPendingGates: Bool = false) async throws -> CockpitSession {
+        guard session.status == .active || session.status == .paused else {
+            throw CockpitLifecycleError.invalidTransition(from: session.status, event: "close")
+        }
+
+        // Guard: no_pending_gates (only enforced from active state per states.json)
+        if session.status == .active && hasPendingGates {
+            throw CockpitLifecycleError.guardViolation(guard: "no_pending_gates", event: "close")
+        }
+
+        var updated = session
+        updated.status = .closed
+        updated.updatedAt = Date()
+        let persisted = try await repository.updateSession(updated)
+
+        logger.info("CockpitSession \(session.id) closed: \(session.status.rawValue) → closed")
+
+        return persisted
+    }
 }

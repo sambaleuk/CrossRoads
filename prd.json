@@ -184,7 +184,7 @@
       "title": "Cockpit Mode UI — activation button and session status display",
       "description": "As a user, I need a Cockpit Mode button in XRoads that activates the session and shows real-time status of each slot during initialization and runtime.",
       "priority": "high",
-      "status": "pending",
+      "status": "complete",
       "depends_on": [
         "US-003"
       ],
@@ -228,10 +228,10 @@
           "should update slot card status in real-time",
           "should pause all slots on session pause"
         ],
-        "status": "pending"
+        "status": "passing"
       },
       "technical_notes": "CockpitModeView as SwiftUI view. @Observable CockpitViewModel drives state. Animation: withAnimation(.spring) on each slot card appearance.",
-      "completed_at": null,
+      "completed_at": "2026-03-28T18:15:00Z",
       "blocked_reason": null
     }
   ],

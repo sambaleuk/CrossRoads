@@ -147,6 +147,13 @@ struct MainWindowView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                // Cockpit Mode panel (US-004)
+                if appState.showCockpitPanel, let cockpitVM = appState.cockpitViewModel {
+                    CockpitModeView(viewModel: cockpitVM)
+                        .frame(width: 300)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+
                 // Right: Stacked panels (Git Recent, Git Worktrees, MCP Logs)
                 if showInspector {
                     RightSidePanel()
@@ -194,6 +201,20 @@ struct MainWindowView: View {
         }
         .help("Toggle orchestrator chat panel (⌘⇧O)")
         .keyboardShortcut("o", modifiers: [.command, .shift])
+
+        // US-004: Cockpit Mode toggle
+        Button {
+            withAnimation(.easeInOut(duration: Theme.Animation.normal)) {
+                appState.showCockpitPanel.toggle()
+            }
+        } label: {
+            Label(
+                appState.showCockpitPanel ? "Hide Cockpit" : "Cockpit Mode",
+                systemImage: appState.cockpitViewModel?.isActive == true ? "gauge.open.with.lines.needle.84percent.exclamation" : "gauge.open.with.lines.needle.33percent"
+            )
+        }
+        .help("Toggle Cockpit Mode panel (⌘⇧C)")
+        .keyboardShortcut("c", modifiers: [.command, .shift])
 
         Button { showNewWorktreeSheet = true } label: {
             Label("Start Session", systemImage: "play.circle.fill")
