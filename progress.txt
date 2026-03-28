@@ -2836,3 +2836,38 @@ Acceptance Criteria Met:
   - Direct override rejection: pending->completed blocked, terminal state blocks further events
 - Build: swift build PASS
 - Tests: swift test --filter ExecutionGateRepositoryTests PASS (17/17)
+
+---
+## Iteration 2 — US-002: SafeExecutorInterceptor in PTYProcessRunner
+### Date: 2026-03-28
+### Status: COMPLETE
+
+### What was done
+- Created `SafeExecPayload` Codable struct for `[SAFEEXEC:{op_type, raw_intent, risk_level}]` protocol
+- Created `SafeExecOutputParser` (same pattern as `PTYOutputParser`) — parses `[SAFEEXEC:{...}]` lines from stdout
+- Created `SafeExecutorInterceptor` actor with full interception pipeline:
+  1. Detects `[SAFEEXEC:{...}]` lines via SafeExecOutputParser
+  2. Validates AgentSlot is in `running` state
+  3. Creates ExecutionGate record via ExecutionGateRepository (pending status)
+  4. Suspends agent process via SIGSTOP (graceful skip in test mode)
+  5. Transitions AgentSlot from `running` to `waiting_approval`
+
+### Files created
+- `XRoads/Services/SafeExecutorInterceptor.swift` — SafeExecPayload, SafeExecOutputParser, SafeExecutorInterceptor actor
+- `XRoadsTests/SafeExecutorInterceptorTests.swift` — 11 unit tests
+
+### Files modified
+- `prd.json` — US-002 status: complete, unit_test.status: passing
+
+### Test results
+- Build: swift build PASS
+- Tests: swift test --filter SafeExecutorInterceptorTests PASS (11/11)
+  - Parser: detect SAFEEXEC prefix, reject non-SAFEEXEC, reject malformed JSON, multi-payload parsing, ignore XROADS prefix
+  - Interceptor: create gate from parsed intent, return nil for non-SAFEEXEC output, suspend process call, transition slot to waiting_approval, reject non-running slot
+  - State transition: running -> waiting_approval on gate_triggered (per states.json)
+
+### Key decisions
+- SafeExecutorInterceptor is wired alongside SlotMessagePublisher (both consume PTY stdout)
+- First SAFEEXEC payload per chunk is intercepted (one gate at a time)
+- Process suspension uses SIGSTOP via kill() — gracefully skipped when PTY is in testMode
+- Slot transition is direct DB write (not via a separate state machine) since AgentSlotLifecycle.gate_triggered action is `suspend_process` which is exactly what we do

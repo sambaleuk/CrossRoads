@@ -24,7 +24,10 @@
       "priority": "critical",
       "status": "complete",
       "depends_on": [],
-      "touches": ["ExecutionGate", "AgentSlot"],
+      "touches": [
+        "ExecutionGate",
+        "AgentSlot"
+      ],
       "transition": "ExecutionGateLifecycle.policy_deny",
       "acceptance_criteria": [
         "ExecutionGate table created with FK to AgentSlot",
@@ -78,9 +81,14 @@
       "title": "SafeExecutorInterceptor in PTYProcessRunner",
       "description": "As the orchestrator, I need PTYProcessRunner to intercept sensitive operations from agent stdout before they execute, create an ExecutionGate, and suspend the agent process pending approval.",
       "priority": "critical",
-      "status": "pending",
-      "depends_on": ["US-001"],
-      "touches": ["ExecutionGate", "AgentSlot"],
+      "status": "complete",
+      "depends_on": [
+        "US-001"
+      ],
+      "touches": [
+        "ExecutionGate",
+        "AgentSlot"
+      ],
       "transition": "AgentSlotLifecycle.gate_triggered",
       "acceptance_criteria": [
         "PTYProcessRunner detects [SAFEEXEC:{...}] prefixed lines from agent stdout",
@@ -109,10 +117,10 @@
           "should suspend agent process on gate creation",
           "should transition AgentSlot to waiting_approval"
         ],
-        "status": "pending"
+        "status": "passing"
       },
       "technical_notes": "SKILL.md injects SafeExecutor protocol: agent emits [SAFEEXEC:{op_type, raw_intent, risk_level}] before any sensitive operation. Interceptor parses with Codable JSON. Process suspension via PTY signal.",
-      "completed_at": null,
+      "completed_at": "2026-03-28T19:46:00Z",
       "blocked_reason": null
     },
     {
@@ -121,8 +129,13 @@
       "description": "As a user (the Board), I need an approval card to appear in the slot UI when an ExecutionGate is pending, showing the operation details and risk level, with approve and reject buttons.",
       "priority": "critical",
       "status": "pending",
-      "depends_on": ["US-002"],
-      "touches": ["ExecutionGate", "AgentSlot"],
+      "depends_on": [
+        "US-002"
+      ],
+      "touches": [
+        "ExecutionGate",
+        "AgentSlot"
+      ],
       "transition": "ExecutionGateLifecycle.approve",
       "acceptance_criteria": [
         "Approval card overlays slot terminal when AgentSlot is in waiting_approval state",
@@ -179,8 +192,13 @@
       "description": "As a user, I need to see the full audit trail of all ExecutionGates for the active CockpitSession so I can review what agents did, what was approved, and what was rolled back.",
       "priority": "high",
       "status": "pending",
-      "depends_on": ["US-003"],
-      "touches": ["ExecutionGate", "CockpitSession"],
+      "depends_on": [
+        "US-003"
+      ],
+      "touches": [
+        "ExecutionGate",
+        "CockpitSession"
+      ],
       "transition": "ExecutionGateLifecycle.success",
       "acceptance_criteria": [
         "Audit Trail panel accessible from Cockpit toolbar",
@@ -225,10 +243,22 @@
     }
   ],
   "functional_requirements": [
-    { "id": "FR-1", "description": "Aucune opération sensible ne s'exécute sans passer par ExecutionGateLifecycle complet" },
-    { "id": "FR-2", "description": "L'approval card est non-bypassable : pas de --force, pas de skip" },
-    { "id": "FR-3", "description": "L'audit trail est immutable : audit_entry ne peut être modifié après écriture" },
-    { "id": "FR-4", "description": "Le rollback est automatique sur anomalie d'exécution — sans intervention humaine" }
+    {
+      "id": "FR-1",
+      "description": "Aucune opération sensible ne s'exécute sans passer par ExecutionGateLifecycle complet"
+    },
+    {
+      "id": "FR-2",
+      "description": "L'approval card est non-bypassable : pas de --force, pas de skip"
+    },
+    {
+      "id": "FR-3",
+      "description": "L'audit trail est immutable : audit_entry ne peut être modifié après écriture"
+    },
+    {
+      "id": "FR-4",
+      "description": "Le rollback est automatique sur anomalie d'exécution — sans intervention humaine"
+    }
   ],
   "technical_considerations": [
     "SafeExecutor NPM package déjà disponible à /Users/birahimmbow/Projets/SafeExecutor",
