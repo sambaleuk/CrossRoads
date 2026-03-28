@@ -2617,3 +2617,46 @@ Acceptance Criteria Met:
   - Guard validation (true/false) for hasValidProject
 - Build: swift build PASS
 - State machine compliance: CockpitLifecycle.activate transition fully implemented with guard + action
+
+### Iteration 3 — US-003: Conductor — Chairman output to slot assignment (Modragor)
+- Date: 2026-03-28
+- Status: COMPLETE
+- Branch: feat/cockpit-01-conductor
+
+#### Files Created
+- XRoads/Models/MetierSkill.swift — GRDB-persisted MetierSkill entity (name, family, skillMdPath, requiredMcps)
+- XRoads/Models/SlotAssignment.swift — SlotAssignment + ChairmanOutput Codable structs
+- XRoads/Services/CockpitCouncilClient.swift — Python subprocess wrapper + MockCockpitCouncilClient for tests
+- XRoads/Services/ConductorService.swift — Orchestrates Chairman → slot creation → session activation
+- XRoadsTests/ConductorTests.swift — 8 tests covering full conductor flow
+
+#### Files Modified
+- XRoads/Services/CockpitDatabaseManager.swift — Added v2 migration for metier_skill table
+- XRoads/Services/CockpitSessionRepository.swift — Added MetierSkill CRUD (createSkill, findSkillByName, fetchSkill)
+- XRoads/Services/CockpitLifecycleManager.swift — Added assignSlots() for initializing → active transition
+- prd.json — US-003 status=complete, unit_test.status=passing
+
+#### Implementation Details
+- CockpitCouncilClient: actor wrapping `python3 -m cockpit_council --chairman` subprocess (JSON stdin/stdout)
+- CockpitCouncilClientProtocol: enables test injection via MockCockpitCouncilClient
+- ConductorService.conductSlotAssignment(): full flow — deliberate → validate → create slots → transition
+- MetierSkill resolved by name; creates placeholder if not found in DB
+- Guard at_least_one_slot_configured: checks slots have skillId assigned
+- Early validation: rejects empty Chairman assignments before reaching lifecycle manager
+
+#### Tests: 8/8 passing (ConductorTests.swift)
+- Calls council with ChairmanInput and receives SlotAssignment
+- Creates AgentSlot records from SlotAssignment and persists them
+- Transitions session from initializing to active after assignment
+- Rejects when Chairman returns no slot assignments
+- State transition: initializing → active via assignSlots()
+- Guard: blocks if no slot has skill configured
+- Relation integrity: AgentSlot belongs_to CockpitSession
+- Rejects when session not in initializing state
+
+#### Regressions: None
+- US-001 (CockpitSessionRepositoryTests): 9/9 pass
+- US-002 (ProjectContextReaderTests): 7/7 pass
+
+- Build: swift build PASS
+- State machine compliance: CockpitLifecycle.slots_assigned transition fully implemented with guard + action

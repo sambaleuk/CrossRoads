@@ -70,4 +70,40 @@ actor CockpitLifecycleManager {
 
         return (persisted, chairmanInput)
     }
+
+    // MARK: - Assign Slots (initializing → active)
+
+    /// Transitions a CockpitSession from initializing to active after slot assignment.
+    ///
+    /// CockpitLifecycle: initializing → slots_assigned [guard: at_least_one_slot_configured] → active
+    /// Action: start_all_slots
+    ///
+    /// - Parameters:
+    ///   - session: The session to transition (must be in initializing state)
+    ///   - slots: The AgentSlot records that were created
+    /// - Returns: Updated session in active state
+    /// - Throws: CockpitLifecycleError on guard violation or invalid state
+    func assignSlots(session: CockpitSession, slots: [AgentSlot]) async throws -> CockpitSession {
+        // Verify current state allows this transition
+        guard session.status == .initializing else {
+            throw CockpitLifecycleError.invalidTransition(from: session.status, event: "slots_assigned")
+        }
+
+        // Guard: at_least_one_slot_configured
+        let configuredSlots = slots.filter { $0.hasSkillAssigned }
+        guard !configuredSlots.isEmpty else {
+            logger.warning("Guard at_least_one_slot_configured failed: no configured slots")
+            throw CockpitLifecycleError.guardViolation(guard: "at_least_one_slot_configured", event: "slots_assigned")
+        }
+
+        // Transition: initializing → active
+        var updated = session
+        updated.status = .active
+        updated.updatedAt = Date()
+        let persisted = try await repository.updateSession(updated)
+
+        logger.info("CockpitSession \(session.id) slots assigned: initializing → active (\(configuredSlots.count) slots)")
+
+        return persisted
+    }
 }

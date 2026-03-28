@@ -87,6 +87,34 @@ actor CockpitDatabaseManager {
             )
         }
 
+        migrator.registerMigration("v2_create_metier_skill") { db in
+            // MetierSkill table
+            try db.create(table: "metier_skill") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("name", .text).notNull()
+                t.column("family", .text).notNull()
+                t.column("skillMdPath", .text).notNull()
+                t.column("requiredMcps", .text)
+                t.column("description", .text)
+                t.column("createdAt", .datetime).notNull()
+            }
+
+            // Unique index on name (from model.json)
+            try db.create(
+                index: "idx_metier_skill_name",
+                on: "metier_skill",
+                columns: ["name"],
+                unique: true
+            )
+
+            // Index on family (from model.json)
+            try db.create(
+                index: "idx_metier_skill_family",
+                on: "metier_skill",
+                columns: ["family"]
+            )
+        }
+
         return migrator
     }
 

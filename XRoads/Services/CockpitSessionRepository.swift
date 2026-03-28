@@ -173,4 +173,31 @@ actor CockpitSessionRepository {
             return (session, slots)
         }
     }
+
+    // MARK: - MetierSkill CRUD
+
+    /// Create a MetierSkill record
+    func createSkill(_ skill: MetierSkill) throws -> MetierSkill {
+        try dbQueue.write { db in
+            var record = skill
+            try record.insert(db)
+            return record
+        }
+    }
+
+    /// Find a MetierSkill by name
+    func findSkillByName(_ name: String) throws -> MetierSkill? {
+        try dbQueue.read { db in
+            try MetierSkill
+                .filter(MetierSkill.Columns.name == name)
+                .fetchOne(db)
+        }
+    }
+
+    /// Fetch a MetierSkill by ID
+    func fetchSkill(id: UUID) throws -> MetierSkill? {
+        try dbQueue.read { db in
+            try MetierSkill.fetchOne(db, key: id)
+        }
+    }
 }

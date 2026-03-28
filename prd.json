@@ -122,7 +122,7 @@
       "title": "Conductor — Chairman output to slot assignment",
       "description": "As the Conductor, I need to send ChairmanInput to cockpit-council, receive the Chairman synthesis, and assign MetierSkill to each AgentSlot based on the decision.",
       "priority": "critical",
-      "status": "pending",
+      "status": "complete",
       "depends_on": [
         "US-002"
       ],
@@ -173,10 +173,10 @@
           "should transition session to active after assignment",
           "should reject if no slots assigned"
         ],
-        "status": "pending"
+        "status": "passing"
       },
       "technical_notes": "CockpitCouncilClient wraps cockpit-council via Python subprocess or HTTP. SlotAssignment: Codable. Sequential slot startup with 500ms delay between each for cinematic effect.",
-      "completed_at": null,
+      "completed_at": "2026-03-28T18:10:00Z",
       "blocked_reason": null
     },
     {
