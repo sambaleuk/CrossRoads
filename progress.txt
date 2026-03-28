@@ -2759,3 +2759,29 @@ Acceptance Criteria Met:
   - currentTask update on status, no update on non-status
   - Multi-line chunk parsing, unknown type skipping
 - Build: swift build PASS
+
+### Iteration 3 (Modragor) — US-003: Chairman Feed aggregator — real-time project synthesis
+- Implemented ChairmanFeedService actor (XRoads/Services/ChairmanFeedService.swift)
+  - Subscribes to MessageBusService AsyncStream for active CockpitSession
+  - Triggers synthesis after 5 new messages (configurable threshold)
+  - Triggers synthesis immediately on blocker message type
+  - 2-second debounce interval between synthesis calls (configurable)
+  - Ignores own chairman_brief messages to prevent feedback loops
+  - Publishes chairman_brief as broadcast AgentMessage to message bus
+  - Updates CockpitSession.chairmanBrief field in SQLite
+- Added ChairmanSynthesisInput/Output models for synthesis mode
+  - ChairmanSynthesisInput: sessionId, projectPath, recentMessages with per-slot agentType
+  - ChairmanSynthesisOutput: summary, activeAgentsStatus, blockers, decisionsRecommended, actionItems
+  - asBrief formatter produces markdown-structured brief
+- Added ChairmanSynthesizer actor (calls cockpit-council --synthesize)
+- Added MockChairmanSynthesizer for test injection (tracks callCount, lastInput)
+- Added ChairmanSynthesizerProtocol for dependency injection
+- Tests: 7/7 passing (XRoadsTests/ChairmanFeedServiceTests.swift)
+  - Triggers after 5 messages
+  - Triggers immediately on blocker
+  - Publishes chairman_brief to message bus
+  - Updates CockpitSession.chairman_brief in SQLite
+  - Does not re-trigger on own chairman_brief messages
+  - Brief includes all required fields (status, blockers, decisions, action items)
+  - Debounce prevents too-frequent synthesis
+- Build: swift build PASS

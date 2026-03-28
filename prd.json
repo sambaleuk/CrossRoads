@@ -115,7 +115,7 @@
       "title": "Chairman Feed aggregator — real-time project synthesis",
       "description": "As the Chairman, I need to read all AgentMessages from active slots, synthesize the project state, and produce a chairman_brief message every N messages or on demand.",
       "priority": "high",
-      "status": "pending",
+      "status": "complete",
       "depends_on": [
         "US-002"
       ],
@@ -147,10 +147,10 @@
           "should publish chairman_brief to message bus",
           "should update CockpitSession.chairman_brief in SQLite"
         ],
-        "status": "pending"
+        "status": "passing"
       },
       "technical_notes": "ChairmanFeedService as Swift actor. Synthesis: call cockpit-council Python with aggregated messages as context. Debounce synthesis calls with 2s minimum interval.",
-      "completed_at": null,
+      "completed_at": "2026-03-28T18:55:00Z",
       "blocked_reason": null
     },
     {
