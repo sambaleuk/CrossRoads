@@ -2802,3 +2802,37 @@ Acceptance Criteria Met:
   - test_sendMessage_ignoresEmptyInput: whitespace-only input rejected
 - Build: swift build PASS
 - All 4 PRD user stories complete. PRD status: complete.
+
+---
+
+## Feature: Cockpit Mode — SafeExecutor Integration + Approval UI
+## PRD: prd.json (cockpit-03-safeexecutor)
+## Started: 2026-03-28
+
+### Iteration 1 - US-001 (ExecutionGate persistence + lifecycle)
+- **Status**: COMPLETE
+- Created ExecutionGate model: `XRoads/Models/ExecutionGate.swift`
+  - ExecutionGateStatus enum mapping all 7 ExecutionGateLifecycle states
+  - RiskLevel enum (low/medium/high/critical)
+  - AuditEntry Codable struct for immutable JSON audit blobs
+  - GRDB FetchableRecord + PersistableRecord conformance with belongsTo(AgentSlot)
+- Created ExecutionGateStateMachine: `XRoads/Services/ExecutionGateStateMachine.swift`
+  - Pure enum with static `transition(from:event:context:)` method
+  - All 9 transitions from states.json encoded with guard evaluation
+  - ExecutionGateEvent enum (9 events), ExecutionGateGuardContext struct
+  - Throws typed errors: invalidTransition, guardViolation
+- Created ExecutionGateRepository actor: `XRoads/Services/ExecutionGateRepository.swift`
+  - `create()`: always starts in pending, enforces FK to AgentSlot
+  - `updateStatus()`: all transitions go through StateMachine — no direct override
+  - `writeAudit()`: immutable — writes once, rejects second write, only on terminal states
+  - `fetch()`, `fetchGates(slotId:)`: read operations
+- Added v5 migration in CockpitDatabaseManager: execution_gate table with FK, indexes
+- Added `hasMany(ExecutionGate)` relation on AgentSlot model
+- Test file: `XRoadsTests/ExecutionGateRepositoryTests.swift` — 17 tests, 0 failures
+  - FK integrity: create with valid slot, reject bogus slot, cascade delete
+  - Lifecycle transitions: pending->dry_run, pending->rejected, pending->executing, full flow, rollback
+  - Audit immutability: write once, reject second write, reject on non-terminal state
+  - Guard enforcement: risk_is_low, approved_by_human, requires_dry_run
+  - Direct override rejection: pending->completed blocked, terminal state blocks further events
+- Build: swift build PASS
+- Tests: swift test --filter ExecutionGateRepositoryTests PASS (17/17)

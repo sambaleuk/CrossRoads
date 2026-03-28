@@ -1,231 +1,245 @@
 {
   "$schema": "../Modragor/schemas/prd.schema.json",
-  "feature_name": "Cockpit Mode — Inter-Slot Message Bus + Chairman Feed",
-  "description": "Bus de messages SQLite permettant aux AgentSlots de communiquer entre eux. Feed Chairman en temps réel synthétisant l'état global du projet. Les agents ne sont plus sourds l'un à l'autre.",
-  "branch": "feat/cockpit-02-bus",
+  "feature_name": "Cockpit Mode — SafeExecutor Integration + Approval UI",
+  "description": "Intégration de SafeExecutor comme middleware de gouvernance dans XRoads. Chaque opération sensible déclenchée par un agent est interceptée, évaluée, dry-runnée, et présentée à l'humain via une approval card dans le slot concerné. Non-bypassable.",
+  "branch": "feat/cockpit-03-safeexecutor",
   "created_at": "2026-03-28T00:00:00Z",
-  "status": "complete",
+  "status": "in_progress",
   "goals": [
-    "Implémenter AgentMessage persistence + MessageBusService actor",
-    "Permettre à chaque slot de publier et recevoir des messages typés",
-    "Implémenter le Chairman Feed : agrégation des messages → synthesis en temps réel",
-    "Afficher le feed et le chat par slot dans l'UI Cockpit"
+    "Implémenter ExecutionGate persistence + cycle de vie ExecutionGateLifecycle",
+    "Implémenter SafeExecutorInterceptor dans PTYProcessRunner",
+    "Implémenter l'approval card UI dans chaque slot avec approve/reject en un clic",
+    "Afficher l'audit trail par session dans le Cockpit"
   ],
   "non_goals": [
-    "SafeExecutor integration (PRD 03)",
-    "Communication réseau entre machines distinctes",
-    "Historique inter-sessions (hors scope v1)"
+    "Implémenter SafeExecutor NPM package lui-même (déjà fait)",
+    "Webhook Slack approval (roadmap SafeExecutor, hors scope XRoads v1)",
+    "Multi-humain approval workflow"
   ],
   "user_stories": [
     {
       "id": "US-001",
-      "title": "AgentMessage persistence + MessageBusService",
-      "description": "As the message bus, I need AgentMessage persisted in SQLite and a MessageBusService actor that handles publish/subscribe for all active slots.",
+      "title": "ExecutionGate persistence + lifecycle",
+      "description": "As SafeExecutor, I need ExecutionGate persisted in SQLite with its full lifecycle so that every gate request is tracked, audited, and non-bypassable.",
       "priority": "critical",
       "status": "complete",
       "depends_on": [],
-      "touches": [
-        "AgentMessage",
-        "AgentSlot",
-        "CockpitSession"
-      ],
-      "transition": "AgentSlotLifecycle.provision",
+      "touches": ["ExecutionGate", "AgentSlot"],
+      "transition": "ExecutionGateLifecycle.policy_deny",
       "acceptance_criteria": [
-        "AgentMessage table created with FK to AgentSlot and CockpitSession (cascade delete)",
-        "MessageBusService actor exposes publish(message:fromSlot:) and subscribe(toSession:) methods",
-        "Messages typed: status, question, blocker, completion, chairman_brief",
-        "Subscribers notified via AsyncStream on new messages"
+        "ExecutionGate table created with FK to AgentSlot",
+        "ExecutionGateRepository actor exposes create, updateStatus, writeAudit methods",
+        "Gate status follows ExecutionGateLifecycle strictly — no direct status override",
+        "audit_entry written as immutable JSON on completion or rollback"
       ],
       "tests": [
         {
-          "desc": "Should keep AgentMessage linked to AgentSlot",
+          "desc": "Should keep ExecutionGate linked to AgentSlot",
           "type": "relation_integrity",
-          "entity": "AgentMessage",
-          "relation": "emitted_by",
+          "entity": "ExecutionGate",
+          "relation": "requested_by",
           "target": "AgentSlot"
         },
         {
-          "desc": "Should keep AgentMessage linked to CockpitSession with cascade delete",
-          "type": "relation_integrity",
-          "entity": "AgentMessage",
-          "relation": "belongs_to",
-          "target": "CockpitSession"
+          "desc": "Should transition ExecutionGate from pending to dry_run when policy allows with dry-run",
+          "type": "state_transition",
+          "machine": "ExecutionGateLifecycle",
+          "from": "pending",
+          "event": "policy_allow",
+          "expected": "dry_run"
+        },
+        {
+          "desc": "Should reject gate when policy denies",
+          "type": "state_transition",
+          "machine": "ExecutionGateLifecycle",
+          "from": "pending",
+          "event": "policy_deny",
+          "expected": "rejected"
         }
       ],
       "unit_test": {
-        "file": "XRoadsTests/MessageBusServiceTests.swift",
-        "name": "test_message_bus_publish_subscribe",
-        "description": "Validates AgentMessage persistence and pub/sub mechanics",
+        "file": "XRoadsTests/ExecutionGateRepositoryTests.swift",
+        "name": "test_execution_gate_persistence",
+        "description": "Validates ExecutionGate SQLite persistence and lifecycle transitions",
         "assertions": [
-          "should persist AgentMessage to SQLite on publish",
-          "should notify subscribers via AsyncStream on new message",
-          "should cascade delete messages on slot removal",
-          "should filter messages by CockpitSession"
+          "should create ExecutionGate with FK to AgentSlot",
+          "should transition through lifecycle states correctly",
+          "should write immutable audit_entry on completion",
+          "should reject direct status override bypassing lifecycle"
         ],
         "status": "passing"
       },
-      "technical_notes": "MessageBusService as Swift actor with GRDB.swift. AsyncStream<AgentMessage> per session subscription. message_type enum enforced at DB level.",
-      "completed_at": "2026-03-28T18:44:00Z",
+      "technical_notes": "ExecutionGateRepository as Swift actor. GRDB.swift. audit_entry: Codable JSON blob. Lifecycle transitions via ExecutionGateStateMachine service.",
+      "completed_at": "2026-03-28T19:40:00Z",
       "blocked_reason": null
     },
     {
       "id": "US-002",
-      "title": "Slot message publisher — agent emits structured messages",
-      "description": "As an AgentSlot, I need to emit structured messages on the bus so that other slots and the Chairman can react to my status, blockers, and completions.",
+      "title": "SafeExecutorInterceptor in PTYProcessRunner",
+      "description": "As the orchestrator, I need PTYProcessRunner to intercept sensitive operations from agent stdout before they execute, create an ExecutionGate, and suspend the agent process pending approval.",
       "priority": "critical",
-      "status": "complete",
-      "depends_on": [
-        "US-001"
-      ],
-      "touches": [
-        "AgentMessage",
-        "AgentSlot"
-      ],
-      "transition": "AgentSlotLifecycle.ready",
+      "status": "pending",
+      "depends_on": ["US-001"],
+      "touches": ["ExecutionGate", "AgentSlot"],
+      "transition": "AgentSlotLifecycle.gate_triggered",
       "acceptance_criteria": [
-        "PTYProcessRunner parses agent stdout for structured message patterns (JSON lines prefixed with [XROADS:])",
-        "Parsed messages published to MessageBusService automatically",
-        "AgentSlot.current_task updated on status message type",
-        "Blocker message type triggers slot status display update in UI"
+        "PTYProcessRunner detects [SAFEEXEC:{...}] prefixed lines from agent stdout",
+        "SafeExecutorInterceptor creates ExecutionGate record from parsed intent",
+        "Agent process suspended (SIGSTOP or stdin blocked) immediately on gate creation",
+        "AgentSlot transitions from running to waiting_approval",
+        "Slot card in UI shows waiting_approval badge and approval card"
       ],
       "tests": [
         {
-          "desc": "Should parse and publish structured message from agent stdout",
-          "type": "functional"
+          "desc": "Should transition AgentSlot from running to waiting_approval on gate trigger",
+          "type": "state_transition",
+          "machine": "AgentSlotLifecycle",
+          "from": "running",
+          "event": "gate_triggered",
+          "expected": "waiting_approval"
         }
       ],
       "unit_test": {
-        "file": "XRoadsTests/SlotMessagePublisherTests.swift",
-        "name": "test_slot_message_publisher",
-        "description": "Validates structured message extraction from agent stdout",
+        "file": "XRoadsTests/SafeExecutorInterceptorTests.swift",
+        "name": "test_safe_executor_interceptor",
+        "description": "Validates stdout interception, gate creation, and agent suspension",
         "assertions": [
-          "should detect [XROADS:] prefix in stdout line",
-          "should parse JSON payload and create AgentMessage",
-          "should publish message to MessageBusService",
-          "should update AgentSlot.current_task on status message"
+          "should detect [SAFEEXEC:] prefix in agent stdout",
+          "should create ExecutionGate from parsed intent",
+          "should suspend agent process on gate creation",
+          "should transition AgentSlot to waiting_approval"
         ],
-        "status": "passing"
+        "status": "pending"
       },
-      "technical_notes": "SKILL.md injects instruction: emit [XROADS:{type:status|blocker|completion|question, content:string}] lines. PTYOutputParser extracts these. No regex — swift Codable JSON decode.",
-      "completed_at": "2026-03-28T18:49:00Z",
+      "technical_notes": "SKILL.md injects SafeExecutor protocol: agent emits [SAFEEXEC:{op_type, raw_intent, risk_level}] before any sensitive operation. Interceptor parses with Codable JSON. Process suspension via PTY signal.",
+      "completed_at": null,
       "blocked_reason": null
     },
     {
       "id": "US-003",
-      "title": "Chairman Feed aggregator — real-time project synthesis",
-      "description": "As the Chairman, I need to read all AgentMessages from active slots, synthesize the project state, and produce a chairman_brief message every N messages or on demand.",
-      "priority": "high",
-      "status": "complete",
-      "depends_on": [
-        "US-002"
-      ],
-      "touches": [
-        "AgentMessage",
-        "CockpitSession"
-      ],
-      "transition": "CockpitLifecycle.pause",
+      "title": "Approval Card UI per slot — one-click approve or reject",
+      "description": "As a user (the Board), I need an approval card to appear in the slot UI when an ExecutionGate is pending, showing the operation details and risk level, with approve and reject buttons.",
+      "priority": "critical",
+      "status": "pending",
+      "depends_on": ["US-002"],
+      "touches": ["ExecutionGate", "AgentSlot"],
+      "transition": "ExecutionGateLifecycle.approve",
       "acceptance_criteria": [
-        "ChairmanFeedService subscribes to MessageBusService for the active CockpitSession",
-        "Every 5 new messages or on blocker: call cockpit-council Chairman with context",
-        "Chairman synthesis published as AgentMessage type chairman_brief",
-        "Chairman brief stored in CockpitSession.chairman_brief field",
-        "Brief includes: active agents status, blockers, decisions recommended, action items"
+        "Approval card overlays slot terminal when AgentSlot is in waiting_approval state",
+        "Card shows: operation_type, raw_intent, risk_level badge, dry_run_result summary, estimated impact",
+        "Approve button: transitions gate to executing, resumes agent process",
+        "Reject button: transitions gate to rejected, notifies agent via stdin",
+        "AgentSlot transitions back to running on gate_approved or gate_rejected"
       ],
       "tests": [
         {
-          "desc": "Should update CockpitSession.chairman_brief after Chairman synthesis",
-          "type": "functional"
+          "desc": "Should transition ExecutionGate from awaiting_approval to executing on approve",
+          "type": "state_transition",
+          "machine": "ExecutionGateLifecycle",
+          "from": "awaiting_approval",
+          "event": "approve",
+          "expected": "executing"
+        },
+        {
+          "desc": "Should block approval without human confirmation",
+          "type": "guard_violation",
+          "machine": "ExecutionGateLifecycle",
+          "event": "approve",
+          "guard": "approved_by_human"
+        },
+        {
+          "desc": "Should transition AgentSlot back to running after gate resolved",
+          "type": "state_transition",
+          "machine": "AgentSlotLifecycle",
+          "from": "waiting_approval",
+          "event": "gate_approved",
+          "expected": "running"
         }
       ],
       "unit_test": {
-        "file": "XRoadsTests/ChairmanFeedServiceTests.swift",
-        "name": "test_chairman_feed_aggregator",
-        "description": "Validates Chairman synthesis trigger and brief storage",
+        "file": "XRoadsTests/ApprovalCardViewTests.swift",
+        "name": "test_approval_card_ui",
+        "description": "Validates approval card display, approve/reject flow, and lifecycle transitions",
         "assertions": [
-          "should trigger synthesis after 5 new messages",
-          "should trigger synthesis immediately on blocker message",
-          "should publish chairman_brief to message bus",
-          "should update CockpitSession.chairman_brief in SQLite"
+          "should display approval card when slot is in waiting_approval",
+          "should show risk_level badge with appropriate color",
+          "should call approve and transition gate to executing",
+          "should resume agent process after approval",
+          "should transition slot back to running"
         ],
-        "status": "passing"
+        "status": "pending"
       },
-      "technical_notes": "ChairmanFeedService as Swift actor. Synthesis: call cockpit-council Python with aggregated messages as context. Debounce synthesis calls with 2s minimum interval.",
-      "completed_at": "2026-03-28T18:55:00Z",
+      "technical_notes": "ApprovalCardView as SwiftUI overlay on TerminalSlotView. Risk color: low=green, medium=yellow, high=orange, critical=red.",
+      "completed_at": null,
       "blocked_reason": null
     },
     {
       "id": "US-004",
-      "title": "Cockpit UI — chat panel per slot + Chairman feed display",
-      "description": "As a user, I need to see the message feed per slot and the Chairman brief panel so I can interact with each agent and understand the project state at a glance.",
+      "title": "Audit trail display in Cockpit",
+      "description": "As a user, I need to see the full audit trail of all ExecutionGates for the active CockpitSession so I can review what agents did, what was approved, and what was rolled back.",
       "priority": "high",
-      "status": "complete",
-      "depends_on": [
-        "US-003"
-      ],
-      "touches": [
-        "AgentMessage",
-        "AgentSlot",
-        "CockpitSession"
-      ],
-      "transition": "CockpitLifecycle.resume",
+      "status": "pending",
+      "depends_on": ["US-003"],
+      "touches": ["ExecutionGate", "CockpitSession"],
+      "transition": "ExecutionGateLifecycle.success",
       "acceptance_criteria": [
-        "Each slot card has an expandable chat panel showing its AgentMessage history",
-        "User can type a message to the slot — injected into agent stdin",
-        "Chairman Feed panel (right sidebar or top bar) shows latest chairman_brief",
-        "chairman_brief auto-refreshes when CockpitSession.chairman_brief changes",
-        "Unread messages count badge on each slot card"
+        "Audit Trail panel accessible from Cockpit toolbar",
+        "Lists all ExecutionGates for active CockpitSession, sorted by created_at desc",
+        "Each entry shows: slot_index, operation_type, risk_level, status, approved_by, duration",
+        "Expandable row shows full audit_entry JSON",
+        "ExecutionGate transitions to completed with immutable audit_entry written"
       ],
       "tests": [
         {
-          "desc": "Should display AgentMessages in slot chat panel filtered by AgentSlot",
-          "type": "functional"
+          "desc": "Should transition ExecutionGate from executing to completed on success",
+          "type": "state_transition",
+          "machine": "ExecutionGateLifecycle",
+          "from": "executing",
+          "event": "success",
+          "expected": "completed"
+        },
+        {
+          "desc": "Should transition ExecutionGate to rolled_back on anomaly",
+          "type": "state_transition",
+          "machine": "ExecutionGateLifecycle",
+          "from": "executing",
+          "event": "anomaly",
+          "expected": "rolled_back"
         }
       ],
       "unit_test": {
-        "file": "XRoadsTests/CockpitChatPanelTests.swift",
-        "name": "test_cockpit_chat_panel_ui",
-        "description": "Validates chat panel display and user message injection",
+        "file": "XRoadsTests/AuditTrailViewTests.swift",
+        "name": "test_audit_trail_display",
+        "description": "Validates audit trail panel display and gate status rendering",
         "assertions": [
-          "should display messages filtered by AgentSlot",
-          "should show unread badge count",
-          "should inject user message to agent stdin",
-          "should refresh chairman_brief on session update"
+          "should list all gates for active session sorted desc",
+          "should show completed and rolled_back gates distinctly",
+          "should expand row to show full audit_entry JSON",
+          "should write immutable audit_entry on gate completion"
         ],
-        "status": "passing"
+        "status": "pending"
       },
-      "technical_notes": "SlotChatPanel SwiftUI view. @Observable SlotChatViewModel. User message → PTYProcessRunner.sendInput(). Chairman panel driven by @Observable CockpitSessionViewModel.",
-      "completed_at": "2026-03-28T19:03:00Z",
+      "technical_notes": "AuditTrailView as sheet/panel. audit_entry immutable: written once on success or rolled_back, never updated after.",
+      "completed_at": null,
       "blocked_reason": null
     }
   ],
   "functional_requirements": [
-    {
-      "id": "FR-1",
-      "description": "Messages structurés uniquement — pas de stdout brut dans le bus"
-    },
-    {
-      "id": "FR-2",
-      "description": "Chairman synthesis non-bloquante — agent continue pendant la délibération"
-    },
-    {
-      "id": "FR-3",
-      "description": "User peut interagir avec chaque slot sans interrompre les autres"
-    },
-    {
-      "id": "FR-4",
-      "description": "Messages persistés — feed récupérable après restart"
-    }
+    { "id": "FR-1", "description": "Aucune opération sensible ne s'exécute sans passer par ExecutionGateLifecycle complet" },
+    { "id": "FR-2", "description": "L'approval card est non-bypassable : pas de --force, pas de skip" },
+    { "id": "FR-3", "description": "L'audit trail est immutable : audit_entry ne peut être modifié après écriture" },
+    { "id": "FR-4", "description": "Le rollback est automatique sur anomalie d'exécution — sans intervention humaine" }
   ],
   "technical_considerations": [
-    "AsyncStream<AgentMessage> pour le real-time sans polling",
-    "Structured stdout protocol : [XROADS:{...}] prefix convention",
-    "Chairman synthesis via cockpit-council subprocess — async, non-bloquant",
-    "GRDB.swift observation pour les updates SQLite temps réel"
+    "SafeExecutor NPM package déjà disponible à /Users/birahimmbow/Projets/SafeExecutor",
+    "Protocol stdout SKILL.md : agent émet [SAFEEXEC:{...}] avant toute opération sensible",
+    "AST parser universel dans SafeExecutor — intent normalisé quelle que soit la source",
+    "XRoads appelle SafeExecutor via IPC ou HTTP local sur port dédié"
   ],
   "success_metrics": [
-    "Agent status visible dans le slot en moins de 500ms après émission",
-    "Chairman brief produit en moins de 5 secondes après trigger",
-    "0 message perdu entre publish et subscriber notification",
-    "User message injecté dans agent stdin en moins de 200ms"
+    "0 opération sensible exécutée sans approval card affichée",
+    "Approval card affichée en moins de 1 seconde après interception",
+    "100% des gates auditées avec audit_entry complet",
+    "Rollback automatique déclenché en moins de 500ms sur anomalie"
   ]
 }

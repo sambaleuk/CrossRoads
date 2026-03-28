@@ -155,6 +155,45 @@ actor CockpitDatabaseManager {
             }
         }
 
+        migrator.registerMigration("v5_create_execution_gate") { db in
+            // ExecutionGate table with FK to AgentSlot (triggered_by, cascade delete)
+            try db.create(table: "execution_gate") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("agentSlotId", .text)
+                    .notNull()
+                    .references("agent_slot", onDelete: .cascade)
+                t.column("status", .text).notNull().defaults(to: "pending")
+                t.column("operationType", .text).notNull()
+                t.column("operationPayload", .text).notNull()
+                t.column("riskLevel", .text).notNull()
+                t.column("estimatedImpact", .text)
+                t.column("approvedBy", .text)
+                t.column("approvedAt", .datetime)
+                t.column("deniedReason", .text)
+                t.column("rollbackPayload", .text)
+                t.column("auditEntry", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            // Indexes from model.json
+            try db.create(
+                index: "idx_execution_gate_status",
+                on: "execution_gate",
+                columns: ["status"]
+            )
+            try db.create(
+                index: "idx_execution_gate_risk_level",
+                on: "execution_gate",
+                columns: ["riskLevel"]
+            )
+            try db.create(
+                index: "idx_execution_gate_created_at",
+                on: "execution_gate",
+                columns: ["createdAt"]
+            )
+        }
+
         return migrator
     }
 

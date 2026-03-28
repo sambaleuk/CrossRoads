@@ -65,6 +65,7 @@ extension AgentSlot: FetchableRecord, PersistableRecord {
 
     static let cockpitSession = belongsTo(CockpitSession.self)
     static let messages = hasMany(AgentMessage.self, using: ForeignKey(["fromSlotId"]))
+    static let executionGates = hasMany(ExecutionGate.self)
 
     var cockpitSession: QueryInterfaceRequest<CockpitSession> {
         request(for: AgentSlot.cockpitSession)
@@ -72,6 +73,10 @@ extension AgentSlot: FetchableRecord, PersistableRecord {
 
     var messages: QueryInterfaceRequest<AgentMessage> {
         request(for: AgentSlot.messages)
+    }
+
+    var executionGates: QueryInterfaceRequest<ExecutionGate> {
+        request(for: AgentSlot.executionGates)
     }
 
     enum Columns: String, ColumnExpression {
