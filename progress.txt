@@ -2737,3 +2737,25 @@ Acceptance Criteria Met:
   - Persistence, pub/sub notification, cascade delete on slot removal,
     cascade delete on session removal, session filtering, all message types, relation integrity
 - Build: swift build PASS
+
+### Iteration 2 (PRD-02) — US-002: Slot message publisher — agent emits structured messages
+**Date**: 2026-03-28
+**Status**: COMPLETE
+
+- Created PTYOutputParser (XRoads/Services/PTYOutputParser.swift)
+  - XRoadsPayload Codable struct for [XROADS:{type,content}] protocol
+  - parse(line:) — extracts single payload from stdout line, no regex, pure Codable decode
+  - parseAll(text:) — scans multi-line chunks for all payloads
+- Created SlotMessagePublisher actor (XRoads/Services/SlotMessagePublisher.swift)
+  - processOutput(text:slotId:) — parses PTY stdout, publishes AgentMessages to MessageBusService
+  - Updates AgentSlot.currentTask in SQLite on status messages
+  - Skips unknown message types with warning log
+- Added AgentSlot.currentTask property (XRoads/Models/AgentSlot.swift)
+  - New optional String field persisted to SQLite
+  - DB migration v4_add_agent_slot_current_task (CockpitDatabaseManager.swift)
+- Tests: 9/9 passing (XRoadsTests/SlotMessagePublisherTests.swift)
+  - [XROADS:] prefix detection, JSON parsing, malformed JSON handling
+  - Message publish to bus + subscriber notification
+  - currentTask update on status, no update on non-status
+  - Multi-line chunk parsing, unknown type skipping
+- Build: swift build PASS

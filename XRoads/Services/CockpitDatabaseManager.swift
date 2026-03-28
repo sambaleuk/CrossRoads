@@ -149,6 +149,12 @@ actor CockpitDatabaseManager {
             )
         }
 
+        migrator.registerMigration("v4_add_agent_slot_current_task") { db in
+            try db.alter(table: "agent_slot") { t in
+                t.add(column: "currentTask", .text)
+            }
+        }
+
         return migrator
     }
 

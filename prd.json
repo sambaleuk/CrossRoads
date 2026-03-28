@@ -24,7 +24,11 @@
       "priority": "critical",
       "status": "complete",
       "depends_on": [],
-      "touches": ["AgentMessage", "AgentSlot", "CockpitSession"],
+      "touches": [
+        "AgentMessage",
+        "AgentSlot",
+        "CockpitSession"
+      ],
       "transition": "AgentSlotLifecycle.provision",
       "acceptance_criteria": [
         "AgentMessage table created with FK to AgentSlot and CockpitSession (cascade delete)",
@@ -69,9 +73,14 @@
       "title": "Slot message publisher — agent emits structured messages",
       "description": "As an AgentSlot, I need to emit structured messages on the bus so that other slots and the Chairman can react to my status, blockers, and completions.",
       "priority": "critical",
-      "status": "pending",
-      "depends_on": ["US-001"],
-      "touches": ["AgentMessage", "AgentSlot"],
+      "status": "complete",
+      "depends_on": [
+        "US-001"
+      ],
+      "touches": [
+        "AgentMessage",
+        "AgentSlot"
+      ],
       "transition": "AgentSlotLifecycle.ready",
       "acceptance_criteria": [
         "PTYProcessRunner parses agent stdout for structured message patterns (JSON lines prefixed with [XROADS:])",
@@ -95,10 +104,10 @@
           "should publish message to MessageBusService",
           "should update AgentSlot.current_task on status message"
         ],
-        "status": "pending"
+        "status": "passing"
       },
       "technical_notes": "SKILL.md injects instruction: emit [XROADS:{type:status|blocker|completion|question, content:string}] lines. PTYOutputParser extracts these. No regex — swift Codable JSON decode.",
-      "completed_at": null,
+      "completed_at": "2026-03-28T18:49:00Z",
       "blocked_reason": null
     },
     {
@@ -107,8 +116,13 @@
       "description": "As the Chairman, I need to read all AgentMessages from active slots, synthesize the project state, and produce a chairman_brief message every N messages or on demand.",
       "priority": "high",
       "status": "pending",
-      "depends_on": ["US-002"],
-      "touches": ["AgentMessage", "CockpitSession"],
+      "depends_on": [
+        "US-002"
+      ],
+      "touches": [
+        "AgentMessage",
+        "CockpitSession"
+      ],
       "transition": "CockpitLifecycle.pause",
       "acceptance_criteria": [
         "ChairmanFeedService subscribes to MessageBusService for the active CockpitSession",
@@ -145,8 +159,14 @@
       "description": "As a user, I need to see the message feed per slot and the Chairman brief panel so I can interact with each agent and understand the project state at a glance.",
       "priority": "high",
       "status": "pending",
-      "depends_on": ["US-003"],
-      "touches": ["AgentMessage", "AgentSlot", "CockpitSession"],
+      "depends_on": [
+        "US-003"
+      ],
+      "touches": [
+        "AgentMessage",
+        "AgentSlot",
+        "CockpitSession"
+      ],
       "transition": "CockpitLifecycle.resume",
       "acceptance_criteria": [
         "Each slot card has an expandable chat panel showing its AgentMessage history",
@@ -179,10 +199,22 @@
     }
   ],
   "functional_requirements": [
-    { "id": "FR-1", "description": "Messages structurés uniquement — pas de stdout brut dans le bus" },
-    { "id": "FR-2", "description": "Chairman synthesis non-bloquante — agent continue pendant la délibération" },
-    { "id": "FR-3", "description": "User peut interagir avec chaque slot sans interrompre les autres" },
-    { "id": "FR-4", "description": "Messages persistés — feed récupérable après restart" }
+    {
+      "id": "FR-1",
+      "description": "Messages structurés uniquement — pas de stdout brut dans le bus"
+    },
+    {
+      "id": "FR-2",
+      "description": "Chairman synthesis non-bloquante — agent continue pendant la délibération"
+    },
+    {
+      "id": "FR-3",
+      "description": "User peut interagir avec chaque slot sans interrompre les autres"
+    },
+    {
+      "id": "FR-4",
+      "description": "Messages persistés — feed récupérable après restart"
+    }
   ],
   "technical_considerations": [
     "AsyncStream<AgentMessage> pour le real-time sans polling",
