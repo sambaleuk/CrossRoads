@@ -1,0 +1,101 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Org Chart + Role Hierarchy (Swift)",
+  "description": "Hierarchical role system with goal cascading, authority-based gate routing, and visual org chart. Leverages existing CockpitSession + AgentSlot + ExecutionGate infrastructure. Roles stored in GRDB, managed via OrgChartService actor.",
+  "branch": "feat/S01-org-chart",
+  "created_at": "2026-03-29",
+  "status": "pending",
+  "goals": [
+    "Hierarchical role system integrated with existing cockpit lifecycle",
+    "Roles tied to AgentSlots — each slot gets a role assignment",
+    "Chairman deliberation upgraded to use org chart for goal distribution",
+    "Authority-based gate routing through role hierarchy"
+  ],
+  "non_goals": [
+    "No generic business roles — code-focused roles only"
+  ],
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "OrgRole GRDB model + repository",
+      "description": "New GRDB Record type OrgRole with migration. Fields: id (UUID), sessionId (FK CockpitSession), name (String), roleType (RoleType enum: ceo, tech_lead, backend_engineer, frontend_engineer, qa_engineer, reviewer, devops, architect, custom), parentRoleId (UUID? self-referencing FK), assignedSlotId (UUID? FK AgentSlot), goalDescription (String?), skillNames (String? JSON array), authority (AuthorityLevel enum: full, limited, readonly), timestamps. GRDB association: belongsTo(CockpitSession), optionalBelongsTo(AgentSlot), hasMany(OrgRole as children). Repository actor: OrgRoleRepository with createRole, fetchRolesForSession, fetchChildren(parentId), findCEO(sessionId), updateRole, deleteRole. Max 1 CEO per session constraint.",
+      "status": "pending",
+      "tests": [
+        "OrgRole persists with self-referencing FK",
+        "max 1 CEO per session enforced",
+        "fetchChildren returns correct subtree",
+        "cascade delete removes children"
+      ],
+      "entity_touches": ["OrgRole"],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "Role template system + OrgChartService actor",
+      "description": "New actor OrgChartService. Pre-built templates as static arrays: SoloDev (1 role), Duo (lead + engineer), Squad (lead + 2 engineers + QA), FullTeam (CEO + CTO + 2 leads + 3 engineers + reviewer). applyTemplate(sessionId, templateName) → [OrgRole]: creates roles from template, persists to GRDB. Template auto-populates on cockpit activation — ConductorService calls OrgChartService.applyTemplate before slot assignment. OrgRoleNode tree struct for hierarchical display. getTree(sessionId) → [OrgRoleNode].",
+      "status": "pending",
+      "tests": [
+        "Squad template creates 4 roles with correct hierarchy",
+        "template populates on activation",
+        "tree structure built correctly"
+      ],
+      "entity_touches": ["OrgRole"],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Goal cascading via ConductorService",
+      "description": "Upgrade ConductorService.conductSlotAssignment to cascade goals through org hierarchy. Flow: 1) CEO role gets session-level goal (from chairmanBrief). 2) Lead roles decompose into sub-goals mapped to PRD story groups. 3) Engineer roles receive atomic goals mapped to individual stories. cascadeGoals(sessionId, ceoGoal) → updates all OrgRole.goalDescription down the tree. Goals propagate to AgentSlot.currentTask via role-slot binding. Chairman deliberation output now includes role assignments alongside slot assignments.",
+      "status": "pending",
+      "tests": [
+        "CEO goal cascades to leads",
+        "leads decompose for engineers",
+        "slot currentTask updated from role goal"
+      ],
+      "entity_touches": ["OrgRole", "AgentSlot"],
+      "priority": "high"
+    },
+    {
+      "id": "US-004",
+      "title": "Authority-based gate routing",
+      "description": "Upgrade ExecutionGateStateMachine and CockpitViewModel.approveGate to route approvals through org hierarchy. New method: routeGateApproval(sessionId, slotId, riskLevel) → UUID (role that should approve). Low/medium risk: auto-approved if role has 'full' authority. High risk: escalate to parent role. Critical: escalate to CEO. If no parent, fall back to human approval (existing behavior). Modify CockpitSlotCardView approval card to show 'Awaiting approval from: {role.name}'. Add auto-approve path in gate polling for roles with sufficient authority.",
+      "status": "pending",
+      "tests": [
+        "low risk auto-approved by full-authority role",
+        "high risk escalated to parent",
+        "critical reaches CEO",
+        "no parent falls to human"
+      ],
+      "entity_touches": ["OrgRole", "ExecutionGate"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-005",
+      "title": "Org chart SwiftUI view",
+      "description": "New OrgChartView in CockpitModeView. Visual tree layout: TreeLayout using GeometryReader. Each node: RoleNodeView showing role name, agent type icon, status badge (from assigned slot), current task, cost badge. Connection lines: Path between parent-child nodes, color-coded by agent type. Node tap → expand slot details sheet. Drag-and-drop to reassign slots (update OrgRole.assignedSlotId). Real-time updates via CockpitViewModel polling. Template selector dropdown in activation dialog. Collapse/expand subtrees with disclosure group.",
+      "status": "pending",
+      "tests": [
+        "tree renders correct hierarchy",
+        "node shows live slot status",
+        "drag-drop reassigns slot",
+        "template selector works"
+      ],
+      "entity_touches": ["OrgRole"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-006",
+      "title": "Inter-role communication channels",
+      "description": "Extend MessageBusService with role-aware routing. New AgentMessageType values: delegation, report, peer_request, escalation. Channel types: report_up (child → parent), delegate_down (parent → child), peer (sibling → sibling), broadcast (CEO → all). Role-aware filtering in SlotChatViewModel — show messages relevant to role's position in hierarchy. Automatic status reports: each role's slot sends progress to parent role every N iterations via a new AutoReportService actor that polls slot progress and publishes report messages.",
+      "status": "pending",
+      "tests": [
+        "delegation message reaches correct child",
+        "report reaches parent only",
+        "auto status report fires on iteration",
+        "chat filters by role context"
+      ],
+      "entity_touches": ["OrgRole", "AgentMessage"],
+      "priority": "medium"
+    }
+  ]
+}

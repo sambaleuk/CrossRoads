@@ -1,0 +1,72 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Config Versioning + Rollback (Swift)",
+  "description": "Immutable config snapshots for all orchestration settings — session, org chart, budget, policy, skills. Every change creates a versioned snapshot. Rollback to any version instantly. Config-as-code export to YAML.",
+  "branch": "feat/S06-config-versioning",
+  "created_at": "2026-03-29",
+  "status": "pending",
+  "goals": [
+    "Every config change creates an immutable snapshot",
+    "Rollback to any previous version",
+    "Config inheritance: workspace → session → slot",
+    "Export/import config as YAML (git-trackable)"
+  ],
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "ConfigSnapshot GRDB model + auto-snapshot engine",
+      "description": "New GRDB Record ConfigSnapshot with migration. Fields: id (UUID), sessionId (UUID? FK), workspaceId (UUID? FK), configType (ConfigType enum: session, org_chart, budget, policy, skill_map, runtime_map, full), version (Int, auto-increment per session+type), data (String, JSON blob), diff (String?, JSON diff from previous), changedBy (String: user, system, auto), changeReason (String?), createdAt (Date). ConfigSnapshotRepository actor: createSnapshot (auto-calculates version + diff), fetchSnapshots(sessionId, configType), getLatest, fetchByVersion. Auto-snapshot engine: wire into all config-changing operations (budget update, org chart change, skill assignment, policy override) — each calls createSnapshot before applying change.",
+      "status": "pending",
+      "tests": [
+        "version auto-increments",
+        "diff computed between versions",
+        "auto-snapshot fires on budget change",
+        "getLatest returns most recent"
+      ],
+      "entity_touches": ["ConfigSnapshot"],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "Rollback engine",
+      "description": "ConfigService actor method: rollback(sessionId, configType, targetVersion) async throws. Flow: 1) Snapshot current state (so undo is possible). 2) Load target version data. 3) Parse and apply: restore budget configs, recreate org roles, update policy overrides, reassign skills. 4) Create new snapshot with changeReason 'Rollback to v{N}'. 5) Notify CockpitViewModel via NotificationCenter. Scoped rollback: can rollback individual config types or 'full' (all types at once). History is immutable — rollback creates a new version, never deletes.",
+      "status": "pending",
+      "tests": [
+        "rollback restores previous state",
+        "current state snapshotted before rollback",
+        "individual type rollback works",
+        "history preserved after rollback"
+      ],
+      "entity_touches": ["ConfigSnapshot"],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Config-as-code export/import",
+      "description": "Export: ConfigService.exportToYAML(sessionId) → String. Serializes all config to YAML format. Saved to .crossroads/config.yaml via NSSavePanel or auto-export on change. Format: xroads: section with org_chart, budget, policy, skills, runtimes subsections. Import: ConfigService.importFromYAML(path) → applies config, creates snapshot. On session start: auto-load .crossroads/config.yaml if present. Uses Yams (Swift YAML parser) or manual key-value parsing. Git-trackable: user can commit config.yaml to their repo for reproducible orchestration.",
+      "status": "pending",
+      "tests": [
+        "export creates valid YAML",
+        "import applies config",
+        "auto-load on session start",
+        "invalid YAML returns helpful error"
+      ],
+      "entity_touches": ["ConfigSnapshot"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-004",
+      "title": "Config history + diff viewer UI",
+      "description": "SwiftUI views: 1) ConfigHistoryView — List of snapshots: version badge, timestamp, changedBy, changeReason, configType tag. Accessible from cockpit as 'Config' tab. 2) ConfigDiffView — side-by-side comparison of two versions. Green = added, red = removed, yellow = changed. Uses Text with attributedString for coloring. 3) Rollback button per version with confirmation alert. 4) ConfigInspectorView — shows current effective config with inheritance chain (workspace → session → slot). Inherited values in gray, explicit in white. 'Reset to inherited' button. 5) Export/import buttons in toolbar.",
+      "status": "pending",
+      "tests": [
+        "history list renders snapshots",
+        "diff highlights changes",
+        "rollback with confirmation",
+        "inheritance chain displayed"
+      ],
+      "entity_touches": ["ConfigSnapshot"],
+      "priority": "medium"
+    }
+  ]
+}

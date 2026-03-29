@@ -1,0 +1,92 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Intelligent Orchestration + Learning Loop (Swift)",
+  "description": "XRoads learns from every orchestration run. Adaptive slot assignment, model selection advisor, story time estimation, conflict prediction, post-orchestration retro. This is THE moat — impossible to replicate without deep code telemetry. Leverages existing CostEvent, AgentMetrics, OrchestrationRecord infrastructure.",
+  "branch": "feat/S07-learning-loop",
+  "created_at": "2026-03-29",
+  "status": "pending",
+  "goals": [
+    "Learn from every completed story (timing, cost, files, tests, conflicts)",
+    "Adaptive agent assignment based on historical performance",
+    "Model recommendation (Opus vs Sonnet) based on task complexity",
+    "Story time estimation for accurate progress bars",
+    "Conflict prediction before parallel dispatch",
+    "Auto-generated retro after each orchestration"
+  ],
+  "non_goals": [
+    "No cloud telemetry — all learning is local",
+    "No model fine-tuning"
+  ],
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "LearningRecord + PerformanceProfile GRDB models + telemetry collector",
+      "description": "New GRDB Records with migration. LearningRecord: id, sessionId (FK), storyId, storyTitle, storyComplexity (StoryComplexity enum: simple, moderate, complex, critical), agentType, runtimeId (FK?), model (String?), durationMs (Int), costCents (Int), filesChanged (Int), linesAdded (Int), linesRemoved (Int), testsRun (Int), testsPassed (Int), testsFailed (Int), conflictsEncountered (Int), retriesNeeded (Int), success (Bool), failureReason (String?), filePatterns (String, JSON), createdAt. PerformanceProfile: id, agentType, runtimeId (FK?), taskCategory (String), totalExecutions (Int), successRate (Double), avgDurationMs (Int), avgCostCents (Int), avgFilesChanged (Double), avgTestPassRate (Double), conflictRate (Double), lastUpdatedAt. Unique on (agentType, taskCategory). LearningRepository actor: recordLearning (auto-creates from story completion data — git diff stat, test output, cost sum), updatePerformanceProfile (running averages), fetchProfiles, fetchRecords. Telemetry collector: wire into orchestration engine — when a story completes, automatically extract metrics and call recordLearning.",
+      "status": "pending",
+      "tests": [
+        "learning record created after story completion",
+        "performance profile running averages correct",
+        "file patterns categorized correctly",
+        "telemetry fires automatically"
+      ],
+      "entity_touches": ["LearningRecord", "PerformanceProfile"],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "LearningEngine actor — adaptive assignment + model advisor",
+      "description": "New actor LearningEngine. Core methods: 1) categorizeStory(title, filePatterns) → String: infer task category from keywords + file extensions (backend_rust, frontend_react, testing, db_migration, devops, docs). 2) recommendAgent(taskCategory) → AgentRecommendation?: query PerformanceProfile, rank agents by composite score (successRate×0.4 + 1/avgCost×0.3 + 1/avgDuration×0.3), return top with confidence. 3) recommendModel(taskCategory, complexity) → ModelRecommendation: simple→Sonnet, moderate→Sonnet, complex→Opus, critical→Opus+review. Historical: if Sonnet failed but Opus succeeded for this category, escalate. 4) estimateStoryTime(taskCategory, complexity) → TimeInterval?: lookup avgDurationMs adjusted by complexity multiplier. Wire recommendAgent into ConductorService — chairman output includes ML-backed recommendations with confidence scores.",
+      "status": "pending",
+      "tests": [
+        "categorize correctly from file patterns",
+        "recommend best agent by composite score",
+        "no history falls back to default",
+        "model recommendation escalates on failure history"
+      ],
+      "entity_touches": ["PerformanceProfile"],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Conflict prediction engine",
+      "description": "LearningEngine.predictConflicts(stories: [(storyId, predictedFilePatterns)]) → [ConflictPrediction]. Algorithm: 1) For each story pair, compute file pattern overlap. 2) Risk levels: low (different directories), medium (same directory different files), high (same file pattern). 3) Mitigation: suggest sequencing or same-slot assignment. Wire into orchestration dispatch: before starting parallel layer, run prediction. If high-risk conflicts found, auto-sequence conflicting stories (move to same layer subset or same slot). Show prediction matrix in orchestration start dialog. ConflictPrediction struct: storyA, storyB, overlappingPatterns, risk, suggestion.",
+      "status": "pending",
+      "tests": [
+        "overlapping patterns flagged",
+        "same-directory medium risk",
+        "conflicting stories auto-sequenced",
+        "prediction matrix renders"
+      ],
+      "entity_touches": ["LearningRecord"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-004",
+      "title": "Post-orchestration retro generator",
+      "description": "LearningEngine.generateRetro(sessionId) → RetroDocument. Auto-generated after orchestration completes. Content: 1) Story performance table (duration, cost, pass/fail, agent). 2) Agent leaderboard (best performer). 3) Anomalies (stories 3x+ average, unexpected failures). 4) Recommendations ('Use Claude for backend_rust — 15% faster'). 5) Trend comparison (this run vs last 5 runs average). RetroDocument: markdown string + structured data for charts. Saved to .crossroads/retros/retro-{date}.md. RetroView SwiftUI: formatted display with collapsible sections, inline charts (SwiftUI Charts for trends). Accessible from cockpit 'History' tab. Notification when retro ready: 'Orchestration complete — retro available'.",
+      "status": "pending",
+      "tests": [
+        "retro generated after completion",
+        "anomalies detected",
+        "recommendations based on profiles",
+        "retro saved as markdown"
+      ],
+      "entity_touches": ["LearningRecord", "PerformanceProfile", "OrchestrationRecord"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-005",
+      "title": "Learning dashboard + performance insights UI",
+      "description": "SwiftUI views: 1) LearningDashboardView — global across all sessions. Agent performance comparison chart (bar chart: success rate by agent by category). Cost efficiency chart (cost per successful story by agent). Time trends (line chart: avg story duration over last 20 sessions). 2) RecommendationBadgeView — shown in slot config dialog: 'Recommended: Claude (92% confidence based on 47 runs)'. 3) StoryEstimateView — shown in orchestration start: per-story time estimate + total ETA. 4) ConflictMatrixView — grid showing story pairs with conflict risk color-coding. All charts use SwiftUI Charts framework. Data from PerformanceProfile queries.",
+      "status": "pending",
+      "tests": [
+        "agent comparison chart renders",
+        "recommendation badge shows confidence",
+        "ETA displayed in orchestration start",
+        "conflict matrix renders correctly"
+      ],
+      "entity_touches": ["PerformanceProfile", "LearningRecord"],
+      "priority": "medium"
+    }
+  ]
+}

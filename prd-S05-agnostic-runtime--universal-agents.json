@@ -1,0 +1,86 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Agnostic Runtime + XAP Protocol (Swift)",
+  "description": "Support any agent runtime via the XRoads Agent Protocol (XAP). Custom agents via CLI processes, HTTP webhooks, shell scripts, or Docker containers. Extends existing PTYProcessRunner + ProcessRunner protocol with multi-transport support. Every custom agent gets the same deep code context injection.",
+  "branch": "feat/S05-agnostic-runtime",
+  "created_at": "2026-03-29",
+  "status": "pending",
+  "goals": [
+    "Universal agent protocol (XAP) — 5 methods any runtime can implement",
+    "Support: CLI, HTTP, stdin/stdout, Docker, shell scripts",
+    "Custom agent registration UI in Settings",
+    "Same AGENT.md context injection for ALL agent types",
+    "Agent SDK templates (Python, Node.js, Shell)"
+  ],
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "AgentRuntime GRDB model + built-in registration",
+      "description": "New GRDB Record AgentRuntime with migration. Fields: id (UUID), name (String, UNIQUE), runtimeType (RuntimeType enum: cli, http, stdio, docker, script), command (String?), url (String?), dockerImage (String?), healthCheckCommand (String?), configSchema (String? JSON Schema), configDefaults (String? JSON), capabilities (String, JSON array: code_edit, test_run, git_ops, file_read, terminal, web_browse, mcp_tools), icon (String?), color (String?), isBuiltin (Bool), isEnabled (Bool), createdAt (Date). AgentRuntimeRepository actor: CRUD + findByName + registerBuiltins (Claude Code, Gemini CLI, Codex CLI with correct capabilities). AgentSlot gains optional runtimeId FK. On startup: call registerBuiltins() to ensure 3 defaults exist.",
+      "status": "pending",
+      "tests": [
+        "3 builtins registered on startup",
+        "custom runtime created",
+        "slot links to runtime",
+        "builtins idempotent"
+      ],
+      "entity_touches": ["AgentRuntime", "AgentSlot"],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "XAP transport layer (Swift protocols + implementations)",
+      "description": "New protocol XAPTransport with async methods: initialize(context:) async throws → XAPInitResult, executeStory(story:) async throws → XAPStoryResult, heartbeat() async throws → XAPHeartbeatResult, abort(reason:) async throws, handoff(maxTokens:) async throws → XAPHandoffResult. Concrete implementations: 1) CLITransport: wraps PTYProcessRunner, stdin/stdout JSON lines. 2) HTTPTransport: URLSession POST to agent URL, JSON body/response. 3) StdioTransport: Process() with pipes, JSON lines. 4) DockerTransport: docker run with stdin/stdout. 5) ScriptTransport: execute with environment variables, parse stdout JSON. Each transport has configurable timeouts (30s heartbeat, 600s execute). Factory: XAPTransportFactory.create(runtime: AgentRuntime) → XAPTransport.",
+      "status": "pending",
+      "tests": [
+        "CLI transport round-trips JSON",
+        "HTTP transport posts and parses",
+        "factory creates correct transport",
+        "timeout fires on unresponsive"
+      ],
+      "entity_touches": ["AgentRuntime"],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Universal agent spawner upgrade",
+      "description": "Upgrade existing slot startup flow to use AgentRuntime. When CockpitViewModel starts a slot: 1) Resolve AgentRuntime (from slot.runtimeId or infer from agentType). 2) Create XAPTransport via factory. 3) Generate AGENT.md context (same as before — deep code awareness for ALL agents). 4) Call transport.initialize(context). 5) If runtime has 'terminal' capability, wire PTY output to slot terminal. 6) If HTTP runtime, start heartbeat polling. 7) Track transport in new TransportManager actor. Fully backward compatible — existing claude/gemini/codex slots use built-in CLITransport.",
+      "status": "pending",
+      "tests": [
+        "CLI runtime spawns (backward compat)",
+        "HTTP runtime initializes",
+        "all agents get AGENT.md context",
+        "non-terminal runtimes report progress"
+      ],
+      "entity_touches": ["AgentRuntime", "AgentSlot"],
+      "priority": "high"
+    },
+    {
+      "id": "US-004",
+      "title": "Custom agent registration UI",
+      "description": "New section in Settings: AgentRuntimeSettingsView. 1) List of registered runtimes — built-in (locked) + custom (editable). Enable/disable toggle per runtime. 2) 'Add Agent' sheet: name, runtime type picker (CLI/HTTP/Docker/Script), command/URL/image input based on type, capability checkboxes, icon + color pickers. 3) Health check button — runs healthCheckCommand, shows pass/fail badge. 4) Config editor — JSON editor for agent-specific config. 5) Import/export as JSON for sharing. 6) Custom agents appear in slot configuration dialog alongside built-ins. NSSavePanel for import, JSON codable for export.",
+      "status": "pending",
+      "tests": [
+        "custom agent created via UI",
+        "health check runs",
+        "custom appears in slot config",
+        "import/export round-trips"
+      ],
+      "entity_touches": ["AgentRuntime"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-005",
+      "title": "Agent SDK templates bundled in app",
+      "description": "Bundle 3 agent template directories in app resources. 1) Python: xroads_agent.py with XAPAgent base class, 5 method stubs, example implementation, requirements.txt. 2) Node.js: xroads-agent.js with same structure, package.json. 3) Shell: xroads-agent.sh with env var parsing, JSON output via jq. Each includes: README.md with XAP protocol docs, example PRD, test harness script. 'Create Agent Template' button in AgentRuntimeSettingsView → NSOpenPanel to pick destination directory → copy template. Templates include inline comments explaining each XAP method.",
+      "status": "pending",
+      "tests": [
+        "Python template responds to XAP methods",
+        "templates copy to destination",
+        "README includes protocol docs"
+      ],
+      "entity_touches": [],
+      "priority": "medium"
+    }
+  ]
+}

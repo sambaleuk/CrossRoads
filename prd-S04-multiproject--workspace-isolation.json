@@ -1,0 +1,85 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Multi-Project Workspaces + Isolation (Swift)",
+  "description": "Run multiple projects simultaneously with full isolation. Each workspace has its own session, slots, budget, org chart, and agent pool. Unified monitoring dashboard. Leverages existing AppState decomposition (dashboard, dispatch, orchestration sub-states) — each workspace gets its own sub-state instances.",
+  "branch": "feat/S04-workspaces",
+  "created_at": "2026-03-29",
+  "status": "pending",
+  "goals": [
+    "Multiple simultaneous projects with full data isolation",
+    "Unified monitoring dashboard across all workspaces",
+    "Workspace switcher with keyboard shortcuts",
+    "Cross-workspace agent migration"
+  ],
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "Workspace GRDB model + repository",
+      "description": "New GRDB Record Workspace with migration. Fields: id (UUID), name (String), projectPath (String, UNIQUE), color (String, hex), icon (String?), isActive (Bool, default false), maxSlots (Int, default 6), totalBudgetCents (Int?), metadata (String? JSON), lastAccessedAt (Date), createdAt (Date). WorkspaceRepository actor: createWorkspace, fetchAll, fetchActive, switchActive(id) (deactivates all others, activates this one), updateWorkspace, deleteWorkspace (closes all sessions, cleans worktrees). CockpitSession gains optional workspaceId FK (nullable for backward compat). Unique constraint on projectPath.",
+      "status": "pending",
+      "tests": [
+        "workspace CRUD works",
+        "unique path enforced",
+        "switchActive deactivates others",
+        "delete cascades to sessions"
+      ],
+      "entity_touches": ["Workspace", "CockpitSession"],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "Workspace-scoped AppState",
+      "description": "Refactor AppState to support multiple workspaces. New WorkspaceManager: manages [UUID: WorkspaceState] dictionary. WorkspaceState struct: dashboardState, dispatchState, orchestrationSubState, cockpitViewModel. Active workspace's state feeds into AppState's delegating properties (backward compatible). switchWorkspace(id): updates activeWorkspaceId, swaps sub-state references, updates CockpitViewModel. All data queries (sessions, slots, costs, gates, messages) automatically scoped by active workspace's sessionId. On startup: load all workspaces from GRDB, restore active workspace.",
+      "status": "pending",
+      "tests": [
+        "workspace switch updates all sub-states",
+        "queries scoped to active workspace",
+        "startup restores active workspace"
+      ],
+      "entity_touches": ["Workspace"],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Workspace switcher sidebar + multi-dashboard",
+      "description": "SwiftUI views: 1) WorkspaceSidebarView — vertical list in NavigationSplitView sidebar. Each workspace: color dot + icon + name + agent count badge + status indicator. Click to switch. Plus button → folder picker for new workspace. Right-click context menu: rename, change color, delete. 2) MultiDashboardView — grid of miniature NeonBrain per workspace (tiny brain + slot count + cost badge). Click to focus. 3) Cmd+1 through Cmd+9 keyboard shortcuts to switch workspace (add to existing keyboard handler). 4) Active workspace indicator in toolbar. 5) Transition animation: cross-fade between workspace states.",
+      "status": "pending",
+      "tests": [
+        "sidebar renders all workspaces",
+        "click switches workspace",
+        "Cmd+1 shortcut works",
+        "multi-dashboard shows all brains"
+      ],
+      "entity_touches": ["Workspace"],
+      "priority": "high"
+    },
+    {
+      "id": "US-004",
+      "title": "Cross-workspace agent migration",
+      "description": "Migrate running agent from workspace A to workspace B. MigrationService actor. migrateAgent(slotId, targetWorkspaceId) async: 1) Pause agent in source (slot running → paused). 2) Generate handoff context (progress, learnings from .crossroads/). 3) In target workspace: create new slot with same agentType + skill. 4) Inject handoff into new AGENT.md. 5) Start agent in target. 6) Close slot in source. 7) Transfer cost history (create bridged CostEvents in target). UI: drag agent from workspace sidebar to another workspace. Migration confirmation dialog showing: agent info, source/target projects, estimated context loss.",
+      "status": "pending",
+      "tests": [
+        "agent migrates with handoff context",
+        "source slot closed",
+        "target slot starts with skill",
+        "cost history transferred"
+      ],
+      "entity_touches": ["Workspace", "AgentSlot"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-005",
+      "title": "Unified monitoring dashboard",
+      "description": "GlobalMonitorView: overview across all workspaces. 1) Total agents running (sum across workspaces). 2) Total cost (sum, with per-workspace breakdown). 3) Global health: any workspace in error state surfaces immediately (red badge). 4) Global budget bar (sum of all workspace budgets). 5) Activity feed: last 20 events across all workspaces, color-coded by workspace.color. 6) Quick actions: Pause All, Stop All. Accessible via Cmd+0 or workspace sidebar 'Overview' item. Uses existing polling infrastructure — aggregates across WorkspaceState instances.",
+      "status": "pending",
+      "tests": [
+        "total agents count correct",
+        "global cost sums workspaces",
+        "error workspace surfaces",
+        "pause all stops all agents"
+      ],
+      "entity_touches": ["Workspace"],
+      "priority": "medium"
+    }
+  ]
+}
