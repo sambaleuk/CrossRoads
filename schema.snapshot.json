@@ -1,0 +1,144 @@
+{
+  "tables": {
+    "cockpit_session": {
+      "columns": {
+        "id": { "type": "UUID", "nullable": false, "primary": true },
+        "project_path": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "status": { "type": "VARCHAR(100)", "nullable": false, "primary": false },
+        "chairman_brief": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "created_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "updated_at": { "type": "TIMESTAMP", "nullable": true, "primary": false }
+      },
+      "foreignKeys": [],
+      "indexes": [
+        { "name": "idx_cockpit_session_project_path_status", "fields": ["project_path", "status"], "unique": false }
+      ]
+    },
+    "agent_slot": {
+      "columns": {
+        "id": { "type": "UUID", "nullable": false, "primary": true },
+        "slot_index": { "type": "INTEGER", "nullable": false, "primary": false },
+        "status": { "type": "VARCHAR(100)", "nullable": false, "primary": false },
+        "agent_type": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "worktree_path": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "branch_name": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "created_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "updated_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "cockpit_session_id": { "type": "UUID", "nullable": true, "primary": false },
+        "metier_skill_id": { "type": "UUID", "nullable": true, "primary": false }
+      },
+      "foreignKeys": [
+        {
+          "column": "cockpit_session_id",
+          "referencesTable": "cockpit_session",
+          "referencesColumn": "id",
+          "onDelete": "CASCADE"
+        },
+        {
+          "column": "metier_skill_id",
+          "referencesTable": "metier_skill",
+          "referencesColumn": "id",
+          "onDelete": "SET NULL"
+        }
+      ],
+      "indexes": [
+        { "name": "idx_agent_slot_slot_index", "fields": ["slot_index"], "unique": false },
+        { "name": "idx_agent_slot_status", "fields": ["status"], "unique": false }
+      ]
+    },
+    "metier_skill": {
+      "columns": {
+        "id": { "type": "UUID", "nullable": false, "primary": true },
+        "name": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "family": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "skill_md_path": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "required_mcps": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "description": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "created_at": { "type": "TIMESTAMP", "nullable": true, "primary": false }
+      },
+      "foreignKeys": [],
+      "indexes": [
+        { "name": "idx_metier_skill_name", "fields": ["name"], "unique": true },
+        { "name": "idx_metier_skill_family", "fields": ["family"], "unique": false }
+      ]
+    },
+    "agent_message": {
+      "columns": {
+        "id": { "type": "UUID", "nullable": false, "primary": true },
+        "content": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "message_type": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "from_slot_id": { "type": "UUID", "nullable": false, "primary": false },
+        "to_slot_id": { "type": "UUID", "nullable": true, "primary": false },
+        "is_broadcast": { "type": "BOOLEAN", "nullable": false, "primary": false },
+        "read_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "created_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "agent_slot_id": { "type": "UUID", "nullable": true, "primary": false }
+      },
+      "foreignKeys": [
+        {
+          "column": "agent_slot_id",
+          "referencesTable": "agent_slot",
+          "referencesColumn": "id",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        { "name": "idx_agent_message_from_slot_id", "fields": ["from_slot_id"], "unique": false },
+        { "name": "idx_agent_message_to_slot_id", "fields": ["to_slot_id"], "unique": false },
+        { "name": "idx_agent_message_created_at", "fields": ["created_at"], "unique": false }
+      ]
+    },
+    "execution_gate": {
+      "columns": {
+        "id": { "type": "UUID", "nullable": false, "primary": true },
+        "status": { "type": "VARCHAR(100)", "nullable": false, "primary": false },
+        "operation_type": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "operation_payload": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "risk_level": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "estimated_impact": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "approved_by": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "approved_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "denied_reason": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "rollback_payload": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "created_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "updated_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "agent_slot_id": { "type": "UUID", "nullable": true, "primary": false }
+      },
+      "foreignKeys": [
+        {
+          "column": "agent_slot_id",
+          "referencesTable": "agent_slot",
+          "referencesColumn": "id",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        { "name": "idx_execution_gate_status", "fields": ["status"], "unique": false },
+        { "name": "idx_execution_gate_risk_level", "fields": ["risk_level"], "unique": false },
+        { "name": "idx_execution_gate_created_at", "fields": ["created_at"], "unique": false }
+      ]
+    },
+    "chairman_brief": {
+      "columns": {
+        "id": { "type": "UUID", "nullable": false, "primary": true },
+        "decision": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "summary": { "type": "VARCHAR(255)", "nullable": false, "primary": false },
+        "action_items": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "slot_verdicts": { "type": "VARCHAR(255)", "nullable": true, "primary": false },
+        "created_at": { "type": "TIMESTAMP", "nullable": true, "primary": false },
+        "cockpit_session_id": { "type": "UUID", "nullable": true, "primary": false }
+      },
+      "foreignKeys": [
+        {
+          "column": "cockpit_session_id",
+          "referencesTable": "cockpit_session",
+          "referencesColumn": "id",
+          "onDelete": "CASCADE"
+        }
+      ],
+      "indexes": [
+        { "name": "idx_chairman_brief_created_at", "fields": ["created_at"], "unique": false }
+      ]
+    }
+  }
+}

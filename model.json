@@ -1,0 +1,181 @@
+{
+  "$schema": "./node_modules/modragor/schemas/model.schema.json",
+  "version": "1.0.0",
+  "entities": {
+    "CockpitSession": {
+      "description": "Session cockpit active sur un projet. Agrégat principal du mode orchestration métier.",
+      "attributes": {
+        "id": { "type": "uuid", "primary": true },
+        "project_path": { "type": "string", "required": true },
+        "status": { "type": "state", "ref": "CockpitLifecycle", "required": true },
+        "chairman_brief": { "type": "string", "required": false },
+        "created_at": { "type": "timestamp", "auto": true },
+        "updated_at": { "type": "timestamp", "auto": true }
+      },
+      "relations": [
+        {
+          "target": "AgentSlot",
+          "type": "one-to-many",
+          "composition": true,
+          "label": "contains",
+          "on_delete": "cascade"
+        },
+        {
+          "target": "ChairmanBrief",
+          "type": "one-to-many",
+          "composition": true,
+          "label": "produces",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        { "fields": ["project_path", "status"] }
+      ]
+    },
+    "AgentSlot": {
+      "description": "Slot agent dans une session cockpit. Porte un métier (skill), un worktree isolé, et un terminal PTY.",
+      "attributes": {
+        "id": { "type": "uuid", "primary": true },
+        "slot_index": { "type": "integer", "required": true },
+        "status": { "type": "state", "ref": "AgentSlotLifecycle", "required": true },
+        "agent_type": { "type": "string", "required": true },
+        "worktree_path": { "type": "string", "required": false },
+        "branch_name": { "type": "string", "required": false },
+        "created_at": { "type": "timestamp", "auto": true },
+        "updated_at": { "type": "timestamp", "auto": true }
+      },
+      "relations": [
+        {
+          "target": "CockpitSession",
+          "type": "many-to-one",
+          "required": true,
+          "label": "belongs_to",
+          "on_delete": "cascade"
+        },
+        {
+          "target": "MetierSkill",
+          "type": "many-to-one",
+          "required": false,
+          "label": "runs",
+          "on_delete": "set_null"
+        },
+        {
+          "target": "AgentMessage",
+          "type": "one-to-many",
+          "composition": true,
+          "label": "emits",
+          "on_delete": "cascade"
+        },
+        {
+          "target": "ExecutionGate",
+          "type": "one-to-many",
+          "composition": true,
+          "label": "triggers",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        { "fields": ["slot_index"] },
+        { "fields": ["status"] }
+      ]
+    },
+    "MetierSkill": {
+      "description": "Skill métier injectable dans un AgentSlot. Définit le rôle, les MCP requis, et le SKILL.md.",
+      "attributes": {
+        "id": { "type": "uuid", "primary": true },
+        "name": { "type": "string", "required": true },
+        "family": { "type": "string", "required": true },
+        "skill_md_path": { "type": "string", "required": true },
+        "required_mcps": { "type": "string", "required": false },
+        "description": { "type": "string", "required": false },
+        "created_at": { "type": "timestamp", "auto": true }
+      },
+      "relations": [],
+      "indexes": [
+        { "fields": ["name"], "unique": true },
+        { "fields": ["family"] }
+      ]
+    },
+    "AgentMessage": {
+      "description": "Message sur le bus inter-slots. Permet la communication entre agents via SQLite.",
+      "attributes": {
+        "id": { "type": "uuid", "primary": true },
+        "content": { "type": "string", "required": true },
+        "message_type": { "type": "string", "required": true },
+        "from_slot_id": { "type": "uuid", "required": true },
+        "to_slot_id": { "type": "uuid", "required": false },
+        "is_broadcast": { "type": "boolean", "required": true, "default": false },
+        "read_at": { "type": "timestamp", "required": false },
+        "created_at": { "type": "timestamp", "auto": true }
+      },
+      "relations": [
+        {
+          "target": "AgentSlot",
+          "type": "many-to-one",
+          "required": true,
+          "label": "emitted_by",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        { "fields": ["from_slot_id"] },
+        { "fields": ["to_slot_id"] },
+        { "fields": ["created_at"] }
+      ]
+    },
+    "ExecutionGate": {
+      "description": "Gate SafeExecutor levée par un agent. Bloque l'exécution jusqu'à approbation humaine.",
+      "attributes": {
+        "id": { "type": "uuid", "primary": true },
+        "status": { "type": "state", "ref": "ExecutionGateLifecycle", "required": true },
+        "operation_type": { "type": "string", "required": true },
+        "operation_payload": { "type": "string", "required": true },
+        "risk_level": { "type": "string", "required": true },
+        "estimated_impact": { "type": "string", "required": false },
+        "approved_by": { "type": "string", "required": false },
+        "approved_at": { "type": "timestamp", "required": false },
+        "denied_reason": { "type": "string", "required": false },
+        "rollback_payload": { "type": "string", "required": false },
+        "created_at": { "type": "timestamp", "auto": true },
+        "updated_at": { "type": "timestamp", "auto": true }
+      },
+      "relations": [
+        {
+          "target": "AgentSlot",
+          "type": "many-to-one",
+          "required": true,
+          "label": "triggered_by",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        { "fields": ["status"] },
+        { "fields": ["risk_level"] },
+        { "fields": ["created_at"] }
+      ]
+    },
+    "ChairmanBrief": {
+      "description": "Synthèse cockpit-council produite par le Chairman. Résumé de l'état de tous les slots.",
+      "attributes": {
+        "id": { "type": "uuid", "primary": true },
+        "decision": { "type": "string", "required": true },
+        "summary": { "type": "string", "required": true },
+        "action_items": { "type": "string", "required": false },
+        "slot_verdicts": { "type": "string", "required": false },
+        "created_at": { "type": "timestamp", "auto": true }
+      },
+      "relations": [
+        {
+          "target": "CockpitSession",
+          "type": "many-to-one",
+          "required": true,
+          "label": "belongs_to",
+          "on_delete": "cascade"
+        }
+      ],
+      "indexes": [
+        { "fields": ["created_at"] }
+      ]
+    }
+  }
+}

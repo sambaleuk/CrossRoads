@@ -1,0 +1,287 @@
+{
+  "$schema": "../Modragor/schemas/states.schema.json",
+  "version": "1.0.0",
+  "machines": {
+    "CockpitLifecycle": {
+      "entity": "CockpitSession",
+      "initial": "idle",
+      "terminal": ["closed"],
+      "states": {
+        "idle": {
+          "description": "Cockpit inactif, aucun agent configuré.",
+          "transitions": [
+            {
+              "event": "activate",
+              "target": "initializing",
+              "guard": "has_valid_project",
+              "action": "read_project_context",
+              "description": "Activer le mode Cockpit sur un projet"
+            }
+          ]
+        },
+        "initializing": {
+          "description": "Lecture du contexte projet, délibération Chairman cockpit-council, assignation des slots.",
+          "transitions": [
+            {
+              "event": "slots_assigned",
+              "target": "active",
+              "guard": "at_least_one_slot_configured",
+              "action": "start_all_slots",
+              "description": "Slots assignés, démarrage séquentiel"
+            },
+            {
+              "event": "fail",
+              "target": "idle",
+              "action": "clear_state",
+              "description": "Échec d'initialisation"
+            }
+          ]
+        },
+        "active": {
+          "description": "Cockpit actif, tous les agents en cours d'exécution.",
+          "transitions": [
+            {
+              "event": "pause",
+              "target": "paused",
+              "action": "suspend_all_slots",
+              "description": "Mettre en pause tous les agents"
+            },
+            {
+              "event": "close",
+              "target": "closed",
+              "guard": "no_pending_gates",
+              "action": "terminate_all_slots",
+              "description": "Fermer la session Cockpit proprement"
+            }
+          ]
+        },
+        "paused": {
+          "description": "Cockpit en pause, agents suspendus.",
+          "transitions": [
+            {
+              "event": "resume",
+              "target": "active",
+              "action": "resume_all_slots",
+              "description": "Reprendre tous les agents"
+            },
+            {
+              "event": "close",
+              "target": "closed",
+              "action": "terminate_all_slots",
+              "description": "Fermer depuis l'état paused"
+            }
+          ]
+        },
+        "closed": {
+          "description": "Session Cockpit terminée et archivée.",
+          "transitions": []
+        }
+      }
+    },
+    "AgentSlotLifecycle": {
+      "entity": "AgentSlot",
+      "initial": "empty",
+      "terminal": ["done", "error"],
+      "states": {
+        "empty": {
+          "description": "Slot vide, aucun agent configuré.",
+          "transitions": [
+            {
+              "event": "provision",
+              "target": "provisioning",
+              "guard": "has_skill_assigned",
+              "action": "create_worktree",
+              "description": "Provisionner le slot avec un MetierSkill"
+            }
+          ]
+        },
+        "provisioning": {
+          "description": "Création du worktree git isolé et injection du SKILL.md.",
+          "transitions": [
+            {
+              "event": "ready",
+              "target": "running",
+              "action": "start_agent_process",
+              "description": "Worktree prêt, démarrage du processus agent"
+            },
+            {
+              "event": "fail",
+              "target": "error",
+              "action": "log_error",
+              "description": "Échec de provisionnement"
+            }
+          ]
+        },
+        "running": {
+          "description": "Agent en cours d'exécution dans son worktree.",
+          "transitions": [
+            {
+              "event": "gate_triggered",
+              "target": "waiting_approval",
+              "action": "suspend_process",
+              "description": "SafeExecutor a intercepté une opération sensible"
+            },
+            {
+              "event": "pause",
+              "target": "paused",
+              "action": "suspend_process",
+              "description": "Mise en pause manuelle"
+            },
+            {
+              "event": "complete",
+              "target": "done",
+              "action": "commit_and_notify",
+              "description": "Mission accomplie"
+            },
+            {
+              "event": "error",
+              "target": "error",
+              "action": "log_error",
+              "description": "Erreur non récupérable"
+            }
+          ]
+        },
+        "waiting_approval": {
+          "description": "Agent suspendu en attente d'approbation d'une ExecutionGate.",
+          "transitions": [
+            {
+              "event": "gate_approved",
+              "target": "running",
+              "guard": "gate_is_resolved",
+              "action": "resume_process",
+              "description": "Gate approuvée, reprise de l'agent"
+            },
+            {
+              "event": "gate_rejected",
+              "target": "running",
+              "action": "resume_with_rejection",
+              "description": "Gate rejetée, agent informé du refus"
+            }
+          ]
+        },
+        "paused": {
+          "description": "Agent suspendu manuellement.",
+          "transitions": [
+            {
+              "event": "resume",
+              "target": "running",
+              "action": "resume_process",
+              "description": "Reprendre l'agent"
+            },
+            {
+              "event": "stop",
+              "target": "done",
+              "action": "terminate_process",
+              "description": "Arrêter proprement"
+            }
+          ]
+        },
+        "done": {
+          "description": "Agent terminé avec succès.",
+          "transitions": []
+        },
+        "error": {
+          "description": "Agent terminé en erreur.",
+          "transitions": []
+        }
+      }
+    },
+    "ExecutionGateLifecycle": {
+      "entity": "ExecutionGate",
+      "initial": "pending",
+      "terminal": ["completed", "rejected", "rolled_back"],
+      "states": {
+        "pending": {
+          "description": "Gate créée, intent parsé, en attente d'évaluation Policy Engine.",
+          "transitions": [
+            {
+              "event": "policy_allow",
+              "target": "dry_run",
+              "guard": "requires_dry_run",
+              "action": "run_sandbox",
+              "description": "Policy autorise avec dry-run requis"
+            },
+            {
+              "event": "policy_deny",
+              "target": "rejected",
+              "action": "notify_slot",
+              "description": "Policy refuse l'opération"
+            },
+            {
+              "event": "policy_direct",
+              "target": "executing",
+              "guard": "risk_is_low",
+              "action": "execute_operation",
+              "description": "Policy autorise directement (risk LOW)"
+            }
+          ]
+        },
+        "dry_run": {
+          "description": "Simulation sandbox de l'opération.",
+          "transitions": [
+            {
+              "event": "dry_run_done",
+              "target": "awaiting_approval",
+              "guard": "dry_run_feasible",
+              "action": "send_approval_card",
+              "description": "Dry-run OK, carte d'approbation envoyée dans le slot"
+            },
+            {
+              "event": "dry_run_fail",
+              "target": "rejected",
+              "action": "notify_slot",
+              "description": "Dry-run échoué"
+            }
+          ]
+        },
+        "awaiting_approval": {
+          "description": "Carte d'approbation affichée dans l'UI du slot concerné.",
+          "transitions": [
+            {
+              "event": "approve",
+              "target": "executing",
+              "guard": "approved_by_human",
+              "action": "execute_operation",
+              "description": "Humain a approuvé depuis l'UI"
+            },
+            {
+              "event": "reject",
+              "target": "rejected",
+              "action": "notify_slot",
+              "description": "Humain a rejeté"
+            }
+          ]
+        },
+        "executing": {
+          "description": "Opération en cours avec savepoint de protection.",
+          "transitions": [
+            {
+              "event": "success",
+              "target": "completed",
+              "action": "write_audit_entry",
+              "description": "Exécution réussie et auditée"
+            },
+            {
+              "event": "anomaly",
+              "target": "rolled_back",
+              "action": "rollback_and_audit",
+              "description": "Anomalie détectée, rollback automatique"
+            }
+          ]
+        },
+        "completed": {
+          "description": "Opération exécutée, audit écrit.",
+          "transitions": []
+        },
+        "rejected": {
+          "description": "Opération refusée par policy ou par humain.",
+          "transitions": []
+        },
+        "rolled_back": {
+          "description": "Opération rollbackée suite à anomalie d'exécution.",
+          "transitions": []
+        }
+      }
+    }
+  }
+}

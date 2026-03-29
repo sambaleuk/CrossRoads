@@ -85,6 +85,21 @@ actor CostEventRepository {
         }
     }
 
+    /// Fetches all cost events for a session (alias with forSession label).
+    func fetchEvents(forSession sessionId: UUID) throws -> [CostEvent] {
+        try fetchEventsForSession(sessionId: sessionId)
+    }
+
+    /// Returns total spend in cents for a single slot.
+    func totalSpendCents(forSlot slotId: UUID) throws -> Int {
+        try dbQueue.read { db in
+            let events = try CostEvent
+                .filter(CostEvent.Columns.agentSlotId == slotId)
+                .fetchAll(db)
+            return events.reduce(0) { $0 + $1.costCents }
+        }
+    }
+
     // MARK: - Aggregation
 
     /// Returns a UsageSummary for a single slot.
