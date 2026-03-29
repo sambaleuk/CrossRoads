@@ -499,6 +499,52 @@ actor CockpitDatabaseManager {
             )
         }
 
+        migrator.registerMigration("v14_agent_memory") { db in
+            try db.create(table: "agent_memory") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("agentType", .text).notNull()
+                t.column("domain", .text).notNull()
+                t.column("memoryType", .text).notNull().defaults(to: "observation")
+                t.column("content", .text).notNull()
+                t.column("confidence", .double).notNull().defaults(to: 0.5)
+                t.column("sourceSessionId", .text)
+                t.column("sourceStoryId", .text)
+                t.column("tags", .text).defaults(to: "[]")
+                t.column("accessCount", .integer).notNull().defaults(to: 0)
+                t.column("lastAccessedAt", .datetime)
+                t.column("createdAt", .datetime).notNull()
+            }
+
+            try db.create(
+                index: "idx_agent_memory_agent",
+                on: "agent_memory",
+                columns: ["agentType", "domain"]
+            )
+        }
+
+        migrator.registerMigration("v15_trust_score") { db in
+            try db.create(table: "trust_score") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("agentType", .text).notNull()
+                t.column("domain", .text).notNull()
+                t.column("score", .double).notNull().defaults(to: 0.5)
+                t.column("totalStories", .integer).notNull().defaults(to: 0)
+                t.column("successfulStories", .integer).notNull().defaults(to: 0)
+                t.column("totalTestsPassed", .integer).notNull().defaults(to: 0)
+                t.column("totalTestsFailed", .integer).notNull().defaults(to: 0)
+                t.column("autoMergeEnabled", .boolean).notNull().defaults(to: false)
+                t.column("autoMergeThreshold", .double).notNull().defaults(to: 0.9)
+                t.column("lastComputedAt", .datetime).notNull()
+            }
+
+            try db.create(
+                index: "idx_trust_score_agent_domain",
+                on: "trust_score",
+                columns: ["agentType", "domain"],
+                unique: true
+            )
+        }
+
         return migrator
     }
 
