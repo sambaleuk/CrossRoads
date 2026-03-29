@@ -30,10 +30,35 @@ struct CockpitModeView: View {
 
                     Divider()
 
-                    // Chairman Feed sidebar
-                    ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
-                        .frame(width: 280)
+                    // Right sidebar: Chairman Feed + Phase 5 panels
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
+
+                            // Phase 5: Org Chart panel (shown when roles exist)
+                            if !viewModel.orgRoles.isEmpty {
+                                Divider()
+                                OrgChartPanelView(orgRoles: viewModel.orgRoles)
+                            }
+
+                            // Phase 5: Budget panel (shown when data available)
+                            if viewModel.budgetStatus != nil {
+                                Divider()
+                                BudgetPanelView(budgetStatus: viewModel.budgetStatus)
+                            }
+
+                            // Phase 5: Heartbeat panel (shown when results exist)
+                            if !viewModel.heartbeatResults.isEmpty {
+                                Divider()
+                                HeartbeatPanelView(
+                                    heartbeatResults: viewModel.heartbeatResults,
+                                    slots: viewModel.slots
+                                )
+                            }
+                        }
                         .padding(Theme.Spacing.sm)
+                    }
+                    .frame(width: 280)
                 }
             }
         }
@@ -168,6 +193,7 @@ struct CockpitModeView: View {
                             isRevealed: viewModel.revealedSlotIds.contains(slot.id),
                             chatViewModel: chatVM,
                             costSummary: viewModel.slotCosts[slot.id],
+                            pulseResult: viewModel.heartbeatResults[slot.id],
                             pendingGate: viewModel.pendingGates[slot.id],
                             onApproveGate: { gate in
                                 Task { await viewModel.approveGate(gate) }

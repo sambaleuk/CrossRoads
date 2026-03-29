@@ -56,6 +56,15 @@ actor LearningRepository {
         }
     }
 
+    /// Fetch all learning records across all sessions, ordered by creation time descending.
+    func fetchAllRecords() throws -> [LearningRecord] {
+        try dbQueue.read { db in
+            try LearningRecord
+                .order(LearningRecord.Columns.createdAt.desc)
+                .fetchAll(db)
+        }
+    }
+
     // MARK: - PerformanceProfile
 
     /// Update performance profile with running average from a new learning record.

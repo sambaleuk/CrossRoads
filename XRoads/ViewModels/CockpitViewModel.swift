@@ -49,6 +49,15 @@ final class CockpitViewModel {
     /// Session-wide cost summary
     var sessionCost: UsageSummary = .zero
 
+    /// Phase 5: Org chart roles for the active session
+    var orgRoles: [OrgRole] = []
+
+    /// Phase 5: Session-level budget status snapshot
+    var budgetStatus: BudgetStatus?
+
+    /// Phase 5: Per-slot heartbeat pulse results, keyed by slot ID
+    var heartbeatResults: [UUID: PulseResult] = [:]
+
     /// Latest chairman brief text, auto-refreshed from session
     var chairmanBrief: String? {
         session?.chairmanBrief
@@ -76,6 +85,14 @@ final class CockpitViewModel {
     let gateRepo: ExecutionGateRepository?
     /// Cost tracking repository
     let costRepo: CostEventRepository?
+    /// Phase 5: Org chart service (optional for backward compat)
+    private let orgChartService: OrgChartService?
+    /// Phase 5: Budget service (optional for backward compat)
+    private let budgetService: BudgetService?
+    /// Phase 5: Heartbeat service (optional for backward compat)
+    private let heartbeatService: HeartbeatService?
+    /// Phase 5: Learning engine (optional for backward compat)
+    private let learningEngine: LearningEngine?
     private let logger = Logger(subsystem: "com.xroads", category: "CockpitVM")
 
     /// Task for chairman brief polling
@@ -84,6 +101,12 @@ final class CockpitViewModel {
     private var gatePollTask: Task<Void, Never>?
     /// Task for cost summary polling
     private var costPollTask: Task<Void, Never>?
+    /// Phase 5: Task for org chart refresh
+    private var orgChartTask: Task<Void, Never>?
+    /// Phase 5: Task for heartbeat polling
+    private var heartbeatTask: Task<Void, Never>?
+    /// Phase 5: Task for budget polling
+    private var budgetTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -94,7 +117,11 @@ final class CockpitViewModel {
         bus: MessageBusService,
         ptyRunner: ProcessRunner? = nil,
         gateRepo: ExecutionGateRepository? = nil,
-        costRepo: CostEventRepository? = nil
+        costRepo: CostEventRepository? = nil,
+        orgChartService: OrgChartService? = nil,
+        budgetService: BudgetService? = nil,
+        heartbeatService: HeartbeatService? = nil,
+        learningEngine: LearningEngine? = nil
     ) {
         self.lifecycleManager = lifecycleManager
         self.conductorService = conductorService
@@ -103,6 +130,10 @@ final class CockpitViewModel {
         self.ptyRunner = ptyRunner
         self.gateRepo = gateRepo
         self.costRepo = costRepo
+        self.orgChartService = orgChartService
+        self.budgetService = budgetService
+        self.heartbeatService = heartbeatService
+        self.learningEngine = learningEngine
     }
 
     // MARK: - Activate Cockpit Mode
@@ -147,6 +178,11 @@ final class CockpitViewModel {
 
             // Step 8: Start cost summary polling
             startCostPolling()
+
+            // Step 9: Start Phase 5 polling loops
+            startOrgChartRefresh()
+            startHeartbeatPolling()
+            startBudgetPolling()
 
             isLoading = false
             logger.info("Cockpit activated with \(assignedSlots.count) slots")
@@ -247,10 +283,19 @@ final class CockpitViewModel {
             gatePollTask = nil
             costPollTask?.cancel()
             costPollTask = nil
+            orgChartTask?.cancel()
+            orgChartTask = nil
+            heartbeatTask?.cancel()
+            heartbeatTask = nil
+            budgetTask?.cancel()
+            budgetTask = nil
             pendingGates = [:]
             slotProcessIds = [:]
             slotCosts = [:]
             sessionCost = .zero
+            orgRoles = []
+            budgetStatus = nil
+            heartbeatResults = [:]
 
             logger.info("Cockpit session closed")
         } catch {
@@ -430,6 +475,10 @@ final class CockpitViewModel {
                 startGatePolling()
                 // Start cost polling
                 startCostPolling()
+                // Start Phase 5 polling loops
+                startOrgChartRefresh()
+                startHeartbeatPolling()
+                startBudgetPolling()
             }
         } catch {
             logger.error("Failed to load existing session: \(error.localizedDescription)")
@@ -517,6 +566,98 @@ final class CockpitViewModel {
             slotCosts = try await costRepo.breakdownForSession(sessionId: sessionId)
         } catch {
             // Non-fatal
+        }
+    }
+
+    // MARK: - Phase 5: Org Chart Refresh
+
+    /// Polls org roles for the active session every 10 seconds.
+    private func startOrgChartRefresh() {
+        orgChartTask?.cancel()
+        orgChartTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshOrgRoles()
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+    }
+
+    /// Refreshes org role list from the OrgChartService.
+    private func refreshOrgRoles() async {
+        guard let orgChartService, let sessionId = session?.id else { return }
+        do {
+            let roles = try await orgChartService.getTree(sessionId: sessionId)
+            // Flatten tree into a list for the panel
+            orgRoles = flattenTree(roles)
+        } catch {
+            // Non-fatal: org chart refresh failure
+        }
+    }
+
+    /// Flattens OrgRoleNode trees into a flat [OrgRole] array (pre-order).
+    private func flattenTree(_ nodes: [OrgRoleNode]) -> [OrgRole] {
+        var result: [OrgRole] = []
+        for node in nodes {
+            result.append(node.role)
+            result.append(contentsOf: flattenTree(node.children))
+        }
+        return result
+    }
+
+    // MARK: - Phase 5: Heartbeat Polling
+
+    /// Polls heartbeat pulse results for each slot every 10 seconds.
+    private func startHeartbeatPolling() {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshHeartbeats()
+                try? await Task.sleep(for: .seconds(10))
+            }
+        }
+    }
+
+    /// Refreshes heartbeat pulse results for all active slots.
+    private func refreshHeartbeats() async {
+        guard let heartbeatService else { return }
+        for slot in slots where slot.status == .running || slot.status == .paused {
+            if let worktreePath = slot.branchName {
+                let result = await heartbeatService.createPulseResult(
+                    slotId: slot.id,
+                    worktreePath: worktreePath
+                )
+                heartbeatResults[slot.id] = result
+            }
+        }
+    }
+
+    // MARK: - Phase 5: Budget Polling
+
+    /// Polls budget status for the active session every 8 seconds.
+    private func startBudgetPolling() {
+        budgetTask?.cancel()
+        budgetTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshBudget()
+                try? await Task.sleep(for: .seconds(8))
+            }
+        }
+    }
+
+    /// Refreshes the session-level budget status.
+    private func refreshBudget() async {
+        guard let budgetService else { return }
+        // Check budget for each slot and aggregate
+        for slot in slots {
+            do {
+                let status = try await budgetService.checkBudget(slotId: slot.id)
+                // Use the worst status as the session-level summary
+                if budgetStatus == nil || status.percentUsed > (budgetStatus?.percentUsed ?? 0) {
+                    budgetStatus = status
+                }
+            } catch {
+                // Non-fatal: budget check failure for individual slot
+            }
         }
     }
 

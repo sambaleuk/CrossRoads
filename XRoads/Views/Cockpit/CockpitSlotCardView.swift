@@ -15,6 +15,10 @@ struct CockpitSlotCardView: View {
     /// Pending gate to display approval card (nil when no gate awaiting approval)
     /// Cost summary for this slot
     var costSummary: UsageSummary?
+    /// Phase 5: Heartbeat pulse result for this slot
+    var pulseResult: PulseResult?
+    /// Phase 5: Budget status for this slot
+    var slotBudgetStatus: BudgetStatus?
     var pendingGate: ExecutionGate?
     /// Callback when user approves the pending gate
     var onApproveGate: ((ExecutionGate) -> Void)?
@@ -103,6 +107,15 @@ struct CockpitSlotCardView: View {
                 // Status badge
                 cockpitStatusBadge
 
+                // Phase 5: Heartbeat status dot
+                if let pulse = pulseResult {
+                    Circle()
+                        .fill(pulse.alive ? Color.statusSuccess : Color.statusError)
+                        .frame(width: 6, height: 6)
+                        .shadow(color: (pulse.alive ? Color.statusSuccess : Color.statusError).opacity(0.6), radius: 2)
+                        .help(pulse.alive ? "Agent alive" : "Agent dead")
+                }
+
                 // Expand indicator
                 Image(systemName: chatViewModel.isExpanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 9))
@@ -122,6 +135,32 @@ struct CockpitSlotCardView: View {
             // Cost badge
             if let cost = costSummary {
                 CostBadgeView(summary: cost)
+            }
+
+            // Phase 5: Budget mini-bar
+            if let budget = slotBudgetStatus {
+                HStack(spacing: 4) {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.bgApp)
+                                .frame(height: 4)
+
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(budgetMiniBarColor(budget))
+                                .frame(
+                                    width: min(geometry.size.width, geometry.size.width * CGFloat(budget.percentUsed / 100.0)),
+                                    height: 4
+                                )
+                        }
+                    }
+                    .frame(height: 4)
+                    .frame(maxWidth: 60)
+
+                    Text(String(format: "%.0f%%", budget.percentUsed))
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(budgetMiniBarColor(budget))
+                }
             }
 
             // Branch name (if assigned)
@@ -201,6 +240,15 @@ struct CockpitSlotCardView: View {
         case .paused: return "PAUSED"
         case .done: return "DONE"
         case .error: return "ERROR"
+        }
+    }
+
+    /// Phase 5: Budget mini-bar color based on status.
+    private func budgetMiniBarColor(_ status: BudgetStatus) -> Color {
+        switch status.status {
+        case "exceeded": return Color.statusError
+        case "warning": return Color.statusWarning
+        default: return Color.statusSuccess
         }
     }
 }
