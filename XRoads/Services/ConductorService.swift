@@ -38,15 +38,19 @@ actor ConductorService {
     private let councilClient: CockpitCouncilClientProtocol
     private let repository: CockpitSessionRepository
     private let lifecycleManager: CockpitLifecycleManager
+    /// Phase 5: Org chart service for goal cascading (optional for backward compat)
+    private let orgChartService: OrgChartService?
 
     init(
         councilClient: CockpitCouncilClientProtocol,
         repository: CockpitSessionRepository,
-        lifecycleManager: CockpitLifecycleManager
+        lifecycleManager: CockpitLifecycleManager,
+        orgChartService: OrgChartService? = nil
     ) {
         self.councilClient = councilClient
         self.repository = repository
         self.lifecycleManager = lifecycleManager
+        self.orgChartService = orgChartService
     }
 
     // MARK: - Conduct Slot Assignment
@@ -113,6 +117,21 @@ actor ConductorService {
         )
 
         logger.info("Session \(sessionId) activated with \(createdSlots.count) slots")
+
+        // WIRING 5: Cascade goals from chairman brief through the org hierarchy
+        if let orgChartService = orgChartService, let chairmanBrief = activatedSession.chairmanBrief {
+            Task {
+                do {
+                    let cascaded = try await orgChartService.cascadeGoals(
+                        sessionId: sessionId,
+                        ceoGoal: chairmanBrief
+                    )
+                    logger.info("Goal cascading complete: \(cascaded.count) roles received goals")
+                } catch {
+                    logger.warning("Goal cascading failed (non-critical): \(error.localizedDescription)")
+                }
+            }
+        }
 
         return (activatedSession, createdSlots)
     }

@@ -14,11 +14,14 @@ import Foundation
 actor GitMaster {
 
     private let gitService: GitService
+    /// Phase 5: Trust score repository for auto-merge policy (optional for backward compat)
+    private let trustScoreRepo: TrustScoreRepository?
 
     private(set) var state: GitMasterState
 
-    init(gitService: GitService = GitService()) {
+    init(gitService: GitService = GitService(), trustScoreRepo: TrustScoreRepository? = nil) {
         self.gitService = gitService
+        self.trustScoreRepo = trustScoreRepo
         self.state = GitMasterState()
     }
 
@@ -425,6 +428,22 @@ actor GitMaster {
         var rolledBack = false
 
         for branch in completedBranches {
+            // WIRING 4: Check trust score before auto-merging each branch
+            if let trustScoreRepo = trustScoreRepo, let agentType = branch.agentType {
+                let canAutoMerge = (try? await trustScoreRepo.shouldAutoMerge(
+                    agentType: agentType.rawValue,
+                    domain: "general"
+                )) ?? false
+                if !canAutoMerge {
+                    conflicts.append(MergeConflict(
+                        branch: branch.name,
+                        files: [],
+                        message: "Trust score too low for auto-merge (agent: \(agentType.rawValue)). Requires human review."
+                    ))
+                    continue
+                }
+            }
+
             do {
                 try await gitService.merge(
                     branch: branch.name,

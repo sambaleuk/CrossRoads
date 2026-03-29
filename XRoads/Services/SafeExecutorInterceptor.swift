@@ -87,11 +87,23 @@ actor SafeExecutorInterceptor {
     private let gateRepo: ExecutionGateRepository
     private let dbQueue: DatabaseQueue
     private let ptyRunner: PTYProcessRunner
+    /// Phase 5: Org chart service for gate approval routing (optional for backward compat)
+    private let orgChartService: OrgChartService?
+    /// Session ID for org chart lookups
+    private var sessionId: UUID?
 
-    init(gateRepo: ExecutionGateRepository, dbQueue: DatabaseQueue, ptyRunner: PTYProcessRunner) {
+    init(
+        gateRepo: ExecutionGateRepository,
+        dbQueue: DatabaseQueue,
+        ptyRunner: PTYProcessRunner,
+        orgChartService: OrgChartService? = nil,
+        sessionId: UUID? = nil
+    ) {
         self.gateRepo = gateRepo
         self.dbQueue = dbQueue
         self.ptyRunner = ptyRunner
+        self.orgChartService = orgChartService
+        self.sessionId = sessionId
     }
 
     // MARK: - Public
@@ -140,6 +152,22 @@ actor SafeExecutorInterceptor {
             operationPayload: payload.rawIntent,
             riskLevel: payload.riskLevel
         )
+
+        // WIRING 6: Route gate approval through org chart hierarchy
+        if let orgChartService = orgChartService, let sessionId = sessionId {
+            Task {
+                do {
+                    let approverId = try await orgChartService.routeGateApproval(
+                        sessionId: sessionId,
+                        slotId: slotId,
+                        riskLevel: payload.riskLevel
+                    )
+                    logger.info("Gate \(gate.id) routed to approver role \(approverId) based on risk=\(payload.riskLevel)")
+                } catch {
+                    logger.warning("Gate approval routing failed (falling back to human): \(error.localizedDescription)")
+                }
+            }
+        }
 
         // 3. Suspend agent process via SIGSTOP
         try await suspendProcess(processId: processId)

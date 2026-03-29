@@ -4,9 +4,12 @@ import Foundation
 actor MergeCoordinator {
 
     private let gitService: GitService
+    /// Phase 5: Trust score repository for auto-merge policy (optional for backward compat)
+    private let trustScoreRepo: TrustScoreRepository?
 
-    init(gitService: GitService = GitService()) {
+    init(gitService: GitService = GitService(), trustScoreRepo: TrustScoreRepository? = nil) {
         self.gitService = gitService
+        self.trustScoreRepo = trustScoreRepo
     }
 
     func prepareMerge(
@@ -68,6 +71,24 @@ actor MergeCoordinator {
         var rolledBack = false
 
         for step in plan.steps {
+            // WIRING 4: Check trust score to decide auto-merge vs human approval
+            if let trustScoreRepo = trustScoreRepo {
+                let agentType = step.assignment.agentType.rawValue
+                let domain = "general" // Could be derived from file patterns in a future iteration
+                let canAutoMerge = (try? await trustScoreRepo.shouldAutoMerge(agentType: agentType, domain: domain)) ?? false
+                if !canAutoMerge {
+                    // Trust too low for auto-merge — mark as blocked, require human review
+                    conflicts.append(
+                        MergeConflict(
+                            branch: step.assignment.branchName,
+                            files: [],
+                            message: "Trust score too low for auto-merge (agent: \(agentType)). Requires human approval."
+                        )
+                    )
+                    continue
+                }
+            }
+
             guard step.status == .ready else {
                 conflicts.append(
                     MergeConflict(

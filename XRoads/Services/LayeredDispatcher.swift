@@ -67,6 +67,12 @@ actor LayeredDispatcher {
     private let gitService: GitService
     private var statusMonitor: StatusMonitor?
 
+    // Phase 5 / P0 service references (optional for backward compat)
+    private let mlTrainer: MLTrainer?
+    private let agentMemoryRepo: AgentMemoryRepository?
+    private let conflictPreventionService: ConflictPreventionService?
+    private let learningRepo: LearningRepository?
+
     private var currentPhase: DispatchPhase = .idle
     private var slotInfos: [Int: SlotLaunchInfo] = [:]
     private var statusFilePath: URL?
@@ -86,10 +92,18 @@ actor LayeredDispatcher {
 
     init(
         loopLauncher: LoopLauncher = LoopLauncher(),
-        gitService: GitService = GitService()
+        gitService: GitService = GitService(),
+        mlTrainer: MLTrainer? = nil,
+        agentMemoryRepo: AgentMemoryRepository? = nil,
+        conflictPreventionService: ConflictPreventionService? = nil,
+        learningRepo: LearningRepository? = nil
     ) {
         self.loopLauncher = loopLauncher
         self.gitService = gitService
+        self.mlTrainer = mlTrainer
+        self.agentMemoryRepo = agentMemoryRepo
+        self.conflictPreventionService = conflictPreventionService
+        self.learningRepo = learningRepo
     }
 
     // MARK: - Public API
@@ -151,6 +165,25 @@ actor LayeredDispatcher {
             // Phase 4: Start monitoring
             emitProgress("Phase 4/6: Starting status monitor...")
             await startStatusMonitor()
+
+            // Phase 4.5: Conflict prevention analysis before dispatch
+            if let conflictService = conflictPreventionService {
+                emitProgress("Analyzing dispatch plan for conflict risks...")
+                let storyPairs: [(String, [String])] = prd.userStories.map { story in
+                    (story.id, story.dependsOn)
+                }
+                let analysis = await conflictService.analyzeDispatchPlan(stories: storyPairs)
+                if !analysis.riskyPairs.isEmpty {
+                    emitProgress("Conflict prevention: \(analysis.riskyPairs.count) risky pair(s) detected, resequencing applied")
+                    // Apply recommended resequencing if available
+                    if !analysis.recommendedResequencing.isEmpty {
+                        layers = analysis.recommendedResequencing
+                        emitProgress("Layers resequenced to \(layers.count) layer(s) for conflict safety")
+                    }
+                } else {
+                    emitProgress("Conflict prevention: all pairs safe for parallel execution")
+                }
+            }
 
             // Phase 5: Launch from the correct layer
             currentPhase = .launchingLayer
@@ -354,6 +387,28 @@ actor LayeredDispatcher {
 
         // Unblock dependent stories in status.json so agents see "ready" instead of "blocked"
         await unblockReadyStories()
+
+        // WIRING 2: Auto-extract memories from learning records for this story
+        if let memoryRepo = agentMemoryRepo, let learningRepo = learningRepo {
+            Task {
+                do {
+                    // Fetch learning records for this session to extract memories
+                    let records = try await learningRepo.fetchAllRecords()
+                    let storyRecords = records.filter { $0.storyId == event.storyId }
+                    if !storyRecords.isEmpty, let sessionId = storyRecords.first?.sessionId {
+                        let extracted = try await memoryRepo.autoExtractMemories(
+                            sessionId: sessionId,
+                            records: storyRecords
+                        )
+                        if !extracted.isEmpty {
+                            Log.dispatcher.info("Auto-extracted \(extracted.count) memories from story \(event.storyId)")
+                        }
+                    }
+                } catch {
+                    Log.dispatcher.warning("Memory auto-extraction failed for story \(event.storyId): \(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     /// Re-reads status.json from disk, transitions blocked→ready for stories whose deps are all complete, writes back.
@@ -485,6 +540,18 @@ actor LayeredDispatcher {
         await statusMonitor?.stopMonitoring()
         onComplete?()
         emitProgress("All stories completed! 🎉")
+
+        // WIRING 1: Trigger ML model re-training after orchestration completes
+        if let mlTrainer = mlTrainer {
+            Task {
+                do {
+                    try await mlTrainer.trainAll()
+                    Log.dispatcher.info("ML models re-trained after orchestration completion")
+                } catch {
+                    Log.dispatcher.warning("ML training failed (non-critical): \(error.localizedDescription)")
+                }
+            }
+        }
     }
 
     // MARK: - Private: Launching
@@ -553,9 +620,17 @@ actor LayeredDispatcher {
         let outputCallback = onSlotOutput
         let terminationCallback = onSlotTermination
 
+        // WIRING 8: SafeExec parser to scan PTY output for gate requests
+        let safeExecParser = SafeExecOutputParser()
+
         let processId = try await loopLauncher.launchLoop(
             config: config,
             onOutput: { output in
+                // Scan for [SAFEEXEC:{...}] lines in PTY output
+                let safeExecPayloads = safeExecParser.parseAll(text: output)
+                for payload in safeExecPayloads {
+                    Log.dispatcher.warning("SafeExec detected on slot \(slotNumber): op=\(payload.opType) risk=\(payload.riskLevel) intent=\(payload.rawIntent)")
+                }
                 // Forward output to UI
                 outputCallback?(slotNumber, output)
             },

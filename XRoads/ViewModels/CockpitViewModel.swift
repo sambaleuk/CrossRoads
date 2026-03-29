@@ -93,6 +93,12 @@ final class CockpitViewModel {
     private let heartbeatService: HeartbeatService?
     /// Phase 5: Learning engine (optional for backward compat)
     private let learningEngine: LearningEngine?
+    /// Phase 5: Config snapshot repository (optional for backward compat)
+    private let configSnapshotRepo: ConfigSnapshotRepository?
+    /// Phase 5: ML trainer for post-session training (optional for backward compat)
+    private let mlTrainer: MLTrainer?
+    /// Phase 5: Agent memory repository for post-session extraction (optional for backward compat)
+    private let agentMemoryRepo: AgentMemoryRepository?
     private let logger = Logger(subsystem: "com.xroads", category: "CockpitVM")
 
     /// Task for chairman brief polling
@@ -121,7 +127,10 @@ final class CockpitViewModel {
         orgChartService: OrgChartService? = nil,
         budgetService: BudgetService? = nil,
         heartbeatService: HeartbeatService? = nil,
-        learningEngine: LearningEngine? = nil
+        learningEngine: LearningEngine? = nil,
+        configSnapshotRepo: ConfigSnapshotRepository? = nil,
+        mlTrainer: MLTrainer? = nil,
+        agentMemoryRepo: AgentMemoryRepository? = nil
     ) {
         self.lifecycleManager = lifecycleManager
         self.conductorService = conductorService
@@ -134,6 +143,9 @@ final class CockpitViewModel {
         self.budgetService = budgetService
         self.heartbeatService = heartbeatService
         self.learningEngine = learningEngine
+        self.configSnapshotRepo = configSnapshotRepo
+        self.mlTrainer = mlTrainer
+        self.agentMemoryRepo = agentMemoryRepo
     }
 
     // MARK: - Activate Cockpit Mode
@@ -296,6 +308,14 @@ final class CockpitViewModel {
             orgRoles = []
             budgetStatus = nil
             heartbeatResults = [:]
+
+            // WIRING 1: Trigger ML model re-training after session closes
+            if let mlTrainer = mlTrainer {
+                Task {
+                    try? await mlTrainer.trainAll()
+                    logger.info("ML models re-trained after session close")
+                }
+            }
 
             logger.info("Cockpit session closed")
         } catch {
@@ -587,8 +607,24 @@ final class CockpitViewModel {
         guard let orgChartService, let sessionId = session?.id else { return }
         do {
             let roles = try await orgChartService.getTree(sessionId: sessionId)
+            let newRoles = flattenTree(roles)
+            // WIRING 7: Snapshot org chart config when roles change
+            if newRoles.count != orgRoles.count, let configSnapshotRepo = configSnapshotRepo {
+                Task {
+                    let rolesData = newRoles.map { "\($0.name):\($0.roleType)" }.joined(separator: ",")
+                    let snapshot = ConfigSnapshot(
+                        sessionId: sessionId,
+                        configType: "org_chart",
+                        version: 0, // auto-calculated by repository
+                        data: rolesData,
+                        changedBy: "system",
+                        changeReason: "Org chart updated (\(newRoles.count) roles)"
+                    )
+                    try? await configSnapshotRepo.createSnapshot(snapshot)
+                }
+            }
             // Flatten tree into a list for the panel
-            orgRoles = flattenTree(roles)
+            orgRoles = newRoles
         } catch {
             // Non-fatal: org chart refresh failure
         }
@@ -647,6 +683,7 @@ final class CockpitViewModel {
     /// Refreshes the session-level budget status.
     private func refreshBudget() async {
         guard let budgetService else { return }
+        let previousPercent = budgetStatus?.percentUsed ?? 0
         // Check budget for each slot and aggregate
         for slot in slots {
             do {
@@ -657,6 +694,26 @@ final class CockpitViewModel {
                 }
             } catch {
                 // Non-fatal: budget check failure for individual slot
+            }
+        }
+        // WIRING 7: Snapshot budget config when usage crosses 10% thresholds
+        if let currentPercent = budgetStatus?.percentUsed,
+           let sessionId = session?.id,
+           let configSnapshotRepo = configSnapshotRepo {
+            let previousBucket = Int(previousPercent / 10)
+            let currentBucket = Int(currentPercent / 10)
+            if currentBucket > previousBucket {
+                Task {
+                    let snapshot = ConfigSnapshot(
+                        sessionId: sessionId,
+                        configType: "budget",
+                        version: 0,
+                        data: String(format: "%.1f%% used", currentPercent),
+                        changedBy: "system",
+                        changeReason: "Budget crossed \(currentBucket * 10)% threshold"
+                    )
+                    try? await configSnapshotRepo.createSnapshot(snapshot)
+                }
             }
         }
     }
