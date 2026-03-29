@@ -47,8 +47,26 @@ public struct SettingsView: View {
                     Label("API Keys", systemImage: "key.fill")
                 }
                 .tag(SettingsTab.apiKeys)
+
+            BudgetSettingsView()
+                .tabItem {
+                    Label("Budget", systemImage: "dollarsign.circle")
+                }
+                .tag(SettingsTab.budget)
+
+            RuntimesSettingsView()
+                .tabItem {
+                    Label("Runtimes", systemImage: "cpu")
+                }
+                .tag(SettingsTab.runtimes)
+
+            AdvancedSettingsView()
+                .tabItem {
+                    Label("Advanced", systemImage: "slider.horizontal.3")
+                }
+                .tag(SettingsTab.advanced)
         }
-        .frame(width: 550, height: 600)
+        .frame(width: 600, height: 650)
         .background(Color.bgApp)
         .preferredColorScheme(.dark)
     }
@@ -61,6 +79,9 @@ public enum SettingsTab: Hashable, Sendable {
     case cli
     case mcp
     case apiKeys
+    case budget
+    case runtimes
+    case advanced
 }
 
 // Note: CLISettingsView has been moved to Views/Settings/CLISettingsView.swift
