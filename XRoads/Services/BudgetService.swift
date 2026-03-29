@@ -276,4 +276,108 @@ actor BudgetService {
         logger.info("Auto-throttle slot \(slotId): \(String(format: "%.1f", budgetStatus.percentUsed))% used → level \(level)")
         return level
     }
+
+    // MARK: - Cost-Aware Model Routing
+
+    /// Model tier definition
+    struct ModelTier {
+        let name: String
+        let provider: String
+        let inputCostPerM: Double
+        let outputCostPerM: Double
+        let capabilityScore: Double
+    }
+
+    /// Model recommendation result
+    struct ModelRecommendation: Codable, Sendable {
+        let recommendedModel: String
+        let provider: String
+        let reason: String
+        let estimatedCostCents: Int
+        let capabilityScore: Double
+        let budgetPressure: String
+    }
+
+    private static let modelTiers: [(String, String, Double, Double, Double)] = [
+        ("opus",    "anthropic", 15.0,  75.0,  1.0),
+        ("sonnet",  "anthropic", 3.0,   15.0,  0.8),
+        ("haiku",   "anthropic", 0.25,  1.25,  0.5),
+        ("gpt-4o",  "openai",    2.5,   10.0,  0.85),
+        ("o3",      "openai",    10.0,  40.0,  0.95),
+        ("gemini-2","google",    0.50,  1.50,  0.7),
+    ]
+
+    /// Select optimal model based on budget pressure + task complexity.
+    func routeModel(slotId: UUID, complexity: String) async throws -> ModelRecommendation {
+        let budget = try await checkBudget(slotId: slotId)
+
+        let pressure: String
+        if budget.status == "exceeded" {
+            pressure = "critical"
+        } else if budget.percentUsed >= 90.0 {
+            pressure = "heavy"
+        } else if budget.percentUsed >= 60.0 {
+            pressure = "light"
+        } else {
+            pressure = "none"
+        }
+
+        let minCapability: Double
+        switch complexity {
+        case "simple": minCapability = 0.3
+        case "moderate": minCapability = 0.6
+        case "complex": minCapability = 0.8
+        case "critical": minCapability = 0.9
+        default: minCapability = 0.6
+        }
+
+        var candidates = Self.modelTiers
+            .filter { $0.4 >= minCapability }
+            .map { ModelTier(name: $0.0, provider: $0.1, inputCostPerM: $0.2, outputCostPerM: $0.3, capabilityScore: $0.4) }
+
+        if candidates.isEmpty {
+            candidates = Self.modelTiers
+                .map { ModelTier(name: $0.0, provider: $0.1, inputCostPerM: $0.2, outputCostPerM: $0.3, capabilityScore: $0.4) }
+        }
+
+        let costWeight: Double
+        switch pressure {
+        case "critical": costWeight = 0.9
+        case "heavy": costWeight = 0.7
+        case "light": costWeight = 0.4
+        default: costWeight = 0.2
+        }
+        let capWeight = 1.0 - costWeight
+
+        let maxCost = candidates.map { $0.inputCostPerM + $0.outputCostPerM }.max() ?? 1.0
+
+        let best = candidates.max(by: { a, b in
+            let costA = 1.0 - (a.inputCostPerM + a.outputCostPerM) / maxCost
+            let costB = 1.0 - (b.inputCostPerM + b.outputCostPerM) / maxCost
+            let scoreA = capWeight * a.capabilityScore + costWeight * costA
+            let scoreB = capWeight * b.capabilityScore + costWeight * costB
+            return scoreA < scoreB
+        }) ?? candidates[0]
+
+        let estimatedCost = Int((best.inputCostPerM * 5.0 + best.outputCostPerM * 2.0) / 1000.0 * 100.0)
+
+        let reason: String
+        switch pressure {
+        case "critical": reason = "Budget exhausted — using cheapest viable model (\(best.name))"
+        case "heavy": reason = "Budget pressure — downgraded to \(best.name) to save costs"
+        case "light": reason = "Moderate budget usage — \(best.name) balances cost and capability"
+        default: reason = "Budget healthy — \(best.name) selected for best capability"
+        }
+
+        logger.info("Model router: \(best.name) (\(best.provider)) for \(complexity), pressure=\(pressure)")
+
+        return ModelRecommendation(
+            recommendedModel: best.name,
+            provider: best.provider,
+            reason: reason,
+            estimatedCostCents: estimatedCost,
+            capabilityScore: best.capabilityScore,
+            budgetPressure: pressure
+        )
+    }
 }
