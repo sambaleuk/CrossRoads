@@ -110,6 +110,15 @@ final class AppState {
                 let gateRepo = ExecutionGateRepository(dbQueue: dbQueue)
                 let costRepo = CostEventRepository(dbQueue: dbQueue)
 
+                // Phase 5: Create intelligence layer repos for live wiring
+                let learningRepo = LearningRepository(dbQueue: dbQueue)
+                let agentMemoryRepo = AgentMemoryRepository(dbQueue: dbQueue)
+                let trustScoreRepo = TrustScoreRepository(dbQueue: dbQueue, learningRepository: learningRepo)
+                let learningEngine = LearningEngine(learningRepository: learningRepo)
+                let mlTrainer = MLTrainer(learningRepository: learningRepo)
+                let budgetRepo = BudgetRepository(dbQueue: dbQueue)
+                let budgetService = BudgetService(budgetRepository: budgetRepo, costEventRepository: costRepo)
+
                 let vm = CockpitViewModel(
                     lifecycleManager: lifecycleManager,
                     conductorService: conductorService,
@@ -117,7 +126,13 @@ final class AppState {
                     bus: bus,
                     ptyProcessRunner: services.ptyRunner,
                     gateRepo: gateRepo,
-                    costRepo: costRepo
+                    costRepo: costRepo,
+                    budgetService: budgetService,
+                    learningEngine: learningEngine,
+                    mlTrainer: mlTrainer,
+                    agentMemoryRepo: agentMemoryRepo,
+                    learningRepo: learningRepo,
+                    trustScoreRepo: trustScoreRepo
                 )
                 cockpitViewModel = vm
 
@@ -828,6 +843,9 @@ final class AppState {
 
         // Clear process ID (will be re-set if failover relaunches)
         terminalSlots[index].processId = nil
+
+        // WIRING 1+2: Record learning data and auto-extract memories via cockpit VM
+        cockpitViewModel?.recordSlotCompletion(slotNumber: slotNumber, exitCode: exitCode)
 
         // Add to global logs
         let status = exitCode == 0 ? "completed" : isFailover ? "failover requested" : "failed (code \(exitCode))"
