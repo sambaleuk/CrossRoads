@@ -121,7 +121,7 @@ final class AppState {
                 )
                 cockpitViewModel = vm
 
-                // Listen for cockpit slot output → route to dashboard TerminalSlot logs
+                // Listen for cockpit slot output → route to dashboard + MCP log panel
                 NotificationCenter.default.addObserver(
                     forName: .cockpitSlotOutput,
                     object: nil,
@@ -133,12 +133,22 @@ final class AppState {
                           let output = info["output"] as? String,
                           let agentType = info["agentType"] as? String
                     else { return }
-                    if let idx = self.terminalSlots.firstIndex(where: { $0.slotNumber == slotNumber }) {
-                        self.appendSlotOutput(slotNumber: slotNumber, output: output)
-                    }
+
+                    // Route to dashboard terminal slot
+                    self.appendSlotOutput(slotNumber: slotNumber, output: output)
+
+                    // Also add to main MCP logs panel (BoundedBuffer)
+                    let worktreePath = self.terminalSlots.first(where: { $0.slotNumber == slotNumber })?.worktree?.path
+                    let logEntry = LogEntry(
+                        level: .info,
+                        source: agentType,
+                        worktree: worktreePath,
+                        message: output
+                    )
+                    self.addLog(logEntry)
                 }
 
-                // Listen for cockpit slot termination
+                // Listen for cockpit slot termination → update status + log
                 NotificationCenter.default.addObserver(
                     forName: .cockpitSlotTerminated,
                     object: nil,
@@ -149,10 +159,20 @@ final class AppState {
                           let slotNumber = info["slotNumber"] as? Int,
                           let exitCode = info["exitCode"] as? Int32
                     else { return }
+
                     self.handleSlotTermination(slotNumber: slotNumber, exitCode: exitCode)
+
+                    // Log termination to MCP panel
+                    let status = exitCode == 0 ? "completed" : "error (code \(exitCode))"
+                    self.addLog(LogEntry(
+                        level: exitCode == 0 ? .info : .error,
+                        source: "cockpit",
+                        worktree: nil,
+                        message: "Slot \(slotNumber) agent \(status)"
+                    ))
                 }
 
-                // Listen for cockpit slot launches → sync to dashboard TerminalSlots
+                // Listen for cockpit slot launches → sync to dashboard + log
                 NotificationCenter.default.addObserver(
                     forName: .cockpitSlotLaunched,
                     object: nil,
@@ -183,6 +203,14 @@ final class AppState {
                         self.terminalSlots[idx].currentTask = "Auto-launched by cockpit"
                     }
                     self.updateOrchestratorVisualState()
+
+                    // Log launch to MCP panel
+                    self.addLog(LogEntry(
+                        level: .info,
+                        source: "cockpit",
+                        worktree: worktreePath,
+                        message: "🚀 Slot \(slotNumber) launched: \(agentTypeStr) → \(branchName)"
+                    ))
                 }
 
                 await vm.activate(projectPath: path)
