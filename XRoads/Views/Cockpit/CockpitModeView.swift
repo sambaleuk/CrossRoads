@@ -30,9 +30,19 @@ struct CockpitModeView: View {
 
                     Divider()
 
-                    // Right sidebar: Chairman Feed + Phase 5 panels
+                    // Right sidebar: Brain + Chairman Feed + Phase 5 panels
                     ScrollView {
                         VStack(spacing: 0) {
+                            // Cockpit Brain panel (first in sidebar)
+                            CockpitBrainPanelView(
+                                cop: viewModel.cockpitPlan,
+                                adaptationActions: viewModel.adaptationActions
+                            )
+
+                            if viewModel.cockpitPlan != nil {
+                                Divider()
+                            }
+
                             ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
 
                             // Phase 5: Org Chart panel (shown when roles exist)

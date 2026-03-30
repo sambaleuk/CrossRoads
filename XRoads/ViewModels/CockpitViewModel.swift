@@ -58,6 +58,12 @@ final class CockpitViewModel {
     /// Phase 5: Per-slot heartbeat pulse results, keyed by slot ID
     var heartbeatResults: [UUID: PulseResult] = [:]
 
+    /// Cockpit Brain: Current orchestration plan
+    var cockpitPlan: CockpitOrchestrationPlan?
+
+    /// Cockpit Brain: Current adaptation actions
+    var adaptationActions: [AdaptationAction] = []
+
     /// Latest chairman brief text, auto-refreshed from session
     var chairmanBrief: String? {
         session?.chairmanBrief
