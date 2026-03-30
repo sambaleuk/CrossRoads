@@ -909,6 +909,20 @@ final class CockpitViewModel {
                     }
                 )
 
+                // Send the task prompt to the agent via stdin
+                let agentTask = slot.currentTask ?? "Implement assigned stories"
+                let prompt = """
+                    Read the AGENT.md file in this directory for your full mission brief.
+
+                    Project: \(repoURL.lastPathComponent)
+                    Branch: \(branchName)
+                    Task: \(agentTask)
+
+                    Start by reading AGENT.md, then implement the assigned work. Write tests. Commit changes.
+                    """
+                try? await Task.sleep(for: .milliseconds(800)) // Wait for CLI to initialize
+                try? await runner.sendInput(id: processId, text: adapter.formatCommand(prompt))
+
                 // Update slot to running
                 var runningSlot = provisioningSlot
                 runningSlot.status = .running
