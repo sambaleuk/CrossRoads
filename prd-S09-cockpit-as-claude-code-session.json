@@ -1,0 +1,143 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Cockpit as Autonomous Claude Code Session (Swift)",
+  "description": "The cockpit panel becomes a LIVING Claude Code session — not a Swift dashboard that displays data, but an actual Claude Code instance running in background that thinks, decides, observes dev slots, detects active PRDs, spawns support agents, and plans tasks autonomously. It is the project's CTO: always watching, always ready to act.",
+  "branch": "feat/S09-cockpit-alive",
+  "created_at": "2026-03-30",
+  "status": "pending",
+  "goals": [
+    "Cockpit IS a Claude Code session (--agent cockpit-brain, background: true, memory: project)",
+    "Observes all dev slots launched from the chat (left panel)",
+    "Detects prd.json files in the project and understands what's being built",
+    "Spawns its own agents autonomously (META monitor, transverse production, specialists)",
+    "Plans and schedules tasks via /loop",
+    "When no dev slots are running, takes initiative (docs, research, strategy)",
+    "Reacts in real-time to errors, conflicts, budget pressure",
+    "All cockpit output streams to the MCP LOGS panel and cockpit UI"
+  ],
+  "non_goals": [
+    "Cockpit does NOT replace the chat (left panel) — chat is user↔Claude conversation",
+    "Cockpit does NOT launch dev slots from PRDs — that's the chat+dispatch flow",
+    "Cockpit does NOT need user approval for read-only operations"
+  ],
+  "architecture": {
+    "overview": "The cockpit is a single long-running Claude Code headless session launched on app startup. It runs with --agent cockpit-brain which has memory: project, background: true, and broad tool access. It receives the project context (path, git state, active sessions) as its initial prompt, then runs autonomously. It communicates back to XRoads via stream-json events parsed by Swift and routed to the UI.",
+    "flow": [
+      "1. App opens project → cockpit-brain agent definition generated in .claude/agents/cockpit-brain.md",
+      "2. Cockpit session launched: claude -p <context> --agent cockpit-brain --output-format stream-json --verbose",
+      "3. Cockpit reads project, git log, detects prd.json, understands what dev slots are doing",
+      "4. Cockpit enters monitoring loop: /loop 30s scan worktrees + check slot progress",
+      "5. When dev slots finish a layer → cockpit evaluates merge readiness",
+      "6. When no devs running → cockpit produces transverse deliverables (docs, strategy, research)",
+      "7. Cockpit spawns support agents via Claude Code subagent system when needed",
+      "8. All output → stream-json → Swift parser → MCP LOGS panel + Brain tab"
+    ]
+  },
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "cockpit-brain agent definition",
+      "description": "Generate .claude/agents/cockpit-brain.md on app startup when a project is loaded. Frontmatter: name: cockpit-brain, description: 'Autonomous project orchestrator — observes dev agents, manages quality, produces transverse deliverables, plans tasks', tools: [Read, Edit, Bash, Glob, Grep, Write, WebSearch, Agent(meta-monitor, transverse-producer, specialist)], model: inherit, permissionMode: auto, memory: project, background: true. Body contains: the cockpit brain's full mission brief — what it should do, how it should observe dev slots, when to spawn support agents, what transverse deliverables to produce, how to use /loop for monitoring. The definition is regenerated each time the project context changes (new PRD loaded, session starts/ends).",
+      "status": "pending",
+      "tests": [
+        "cockpit-brain.md generated on project load",
+        "frontmatter has correct tools including Agent()",
+        "memory: project for persistent knowledge",
+        "body contains monitoring instructions"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "Cockpit session lifecycle — launch, monitor, shutdown",
+      "description": "Launch the cockpit Claude Code session when the cockpit panel is activated (or automatically on project load). Command: `claude -p <initial_context> --agent cockpit-brain --output-format stream-json --verbose`. The initial context prompt includes: project path, project type/domain (from COP), active dev slots (slot numbers, agent types, branches, tasks), active PRD summary (if any), recent git activity, previous cockpit memories. The session runs indefinitely in background. On app quit: gracefully terminate the cockpit session. On project switch: terminate old, launch new. Store cockpit session_id for resume on app restart. Parse all stream-json output and route to: MCP LOGS panel (text), Brain tab (structured decisions), event handlers (tool calls).",
+      "status": "pending",
+      "tests": [
+        "cockpit session launches on project load",
+        "initial context includes dev slot info",
+        "session persists across panel toggles",
+        "graceful shutdown on app quit",
+        "resume works on restart"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Dev slot observation — watch what the left panel launched",
+      "description": "The cockpit brain monitors dev slots that were launched from the chat (left panel). It does this by: 1) Reading .crossroads/status.json (updated by dev agents). 2) Scanning git worktrees for changes (git diff --stat per worktree). 3) Checking prd.json story statuses. 4) Reading dev agent AGENT.md files for context. The cockpit uses /loop 30s to poll this information periodically. When it detects: story completed → logs it, updates its mental model. Test failure → flags it, considers spawning a debug helper. Merge conflict → alerts the user. All dev slots done → evaluates merge readiness, produces summary. The cockpit NEVER modifies dev slot worktrees — it only reads them.",
+      "status": "pending",
+      "tests": [
+        "cockpit detects active dev worktrees",
+        "story completion detected from prd.json",
+        "test failures flagged",
+        "cockpit does not write to dev worktrees"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "US-004",
+      "title": "PRD detection and context awareness",
+      "description": "The cockpit brain scans for prd.json and prd-*.json files in the project root. When it finds one: 1) Reads and understands the feature being built. 2) Maps PRD stories to active dev slots. 3) Tracks completion progress. 4) Understands dependencies between stories. When a NEW prd.json appears (created by the chat flow): cockpit detects it, reads it, and adjusts its behavior — starts planning transverse deliverables specific to this feature. When prd.json status changes (stories complete): cockpit updates its monitoring focus. The cockpit uses Claude's native file watching — it doesn't need custom polling for this.",
+      "status": "pending",
+      "tests": [
+        "cockpit detects prd.json in project",
+        "stories mapped to dev slots",
+        "new PRD triggers behavior change",
+        "completion progress tracked"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "US-005",
+      "title": "Autonomous support agent spawning",
+      "description": "The cockpit brain can spawn support agents using Claude Code's native subagent system (Agent() tool). Pre-defined support agents in .claude/agents/: 1) meta-monitor.md — watches all dev worktrees, runs tests, checks code quality. isolation: false (works in main repo), tools: [Read, Bash, Glob, Grep]. 2) transverse-producer.md — creates non-code deliverables (.md files). isolation: false, tools: [Read, Write, WebSearch]. 3) specialist-{domain}.md — domain-specific deep analysis. Generated dynamically based on COP. The cockpit decides WHEN to spawn each: meta-monitor immediately when devs start, transverse-producer at 50% dev progress or when no devs running, specialist when domain patterns detected. Each support agent gets a focused prompt from the cockpit. Support agents write to .crossroads/deliverables/. The cockpit reviews their output.",
+      "status": "pending",
+      "tests": [
+        "meta-monitor spawned when dev slots start",
+        "transverse-producer spawned at 50% or idle",
+        "specialist spawned on domain detection",
+        "deliverables written to .crossroads/deliverables/"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "US-006",
+      "title": "Idle mode — cockpit takes initiative",
+      "description": "When no dev slots are running (all completed or none launched), the cockpit switches to initiative mode. It: 1) Scans the project for improvements (code quality, missing tests, outdated deps). 2) Produces transverse deliverables if not already done (README update, API docs, deployment guide). 3) Runs security audit on recent changes. 4) Generates a project health report. 5) Prepares recommendations for the next orchestration session. All output goes to .crossroads/deliverables/ and the Brain tab. The cockpit uses /loop 5m in idle mode (slower than active monitoring). It stops when user starts a new dev session or closes the project.",
+      "status": "pending",
+      "tests": [
+        "idle mode activates when no dev slots",
+        "project improvements detected",
+        "transverse deliverables produced",
+        "health report generated"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "US-007",
+      "title": "Real-time reaction engine",
+      "description": "The cockpit brain reacts to events in real-time: 1) Dev slot error → logs analysis, suggests fix, optionally spawns debug helper. 2) Budget threshold crossed → alerts via MCP LOGS, adjusts model recommendation for remaining work. 3) Merge conflict detected → pauses conflicting slots (via event), reports to user. 4) Story completed → updates tracking, checks if layer is done, triggers merge evaluation. 5) All stories done → generates orchestration retro, triggers ML training, archives session. Reactions are handled by the cockpit's own Claude Code reasoning — not hardcoded Swift logic. The cockpit decides the best response based on context.",
+      "status": "pending",
+      "tests": [
+        "error triggers analysis log",
+        "budget alert appears in MCP LOGS",
+        "completion triggers retro generation",
+        "reactions driven by Claude reasoning not hardcoded"
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "US-008",
+      "title": "Brain tab — live cockpit consciousness display",
+      "description": "The Brain tab in the cockpit panel becomes a LIVE view of the cockpit's Claude Code session. Instead of polling APIs, it directly renders the cockpit's stream-json output: 1) Thinking/reasoning → shown as dimmed text (the cockpit's inner monologue). 2) Tool calls → shown as action badges (Read prd.json, Bash git status, Agent meta-monitor). 3) Decisions → shown as highlighted entries (Spawning transverse agent, Budget at 72% — ok). 4) /loop iterations → shown as periodic pulse entries. 5) Subagent spawns/results → shown with agent name badges. The Brain tab is essentially a terminal view of the cockpit's Claude Code session, styled to match the XRoads UI. It replaces the static COP summary with a LIVING consciousness stream.",
+      "status": "pending",
+      "tests": [
+        "reasoning text displayed in real-time",
+        "tool calls show as badges",
+        "decisions highlighted",
+        "loop iterations visible as pulses"
+      ],
+      "priority": "medium"
+    }
+  ]
+}
