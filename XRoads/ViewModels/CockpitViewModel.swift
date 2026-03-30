@@ -90,6 +90,7 @@ final class CockpitViewModel {
     private let repository: CockpitSessionRepository
     private let bus: MessageBusService
     private let ptyRunner: ProcessRunner?
+    private let ptyProcessRunner: PTYProcessRunner?
     /// US-004: Exposed for AuditTrailView sheet creation
     let gateRepo: ExecutionGateRepository?
     /// Cost tracking repository
@@ -131,6 +132,7 @@ final class CockpitViewModel {
         repository: CockpitSessionRepository,
         bus: MessageBusService,
         ptyRunner: ProcessRunner? = nil,
+        ptyProcessRunner: PTYProcessRunner? = nil,
         gateRepo: ExecutionGateRepository? = nil,
         costRepo: CostEventRepository? = nil,
         orgChartService: OrgChartService? = nil,
@@ -146,6 +148,7 @@ final class CockpitViewModel {
         self.repository = repository
         self.bus = bus
         self.ptyRunner = ptyRunner
+        self.ptyProcessRunner = ptyProcessRunner
         self.gateRepo = gateRepo
         self.costRepo = costRepo
         self.orgChartService = orgChartService
@@ -771,7 +774,7 @@ final class CockpitViewModel {
     /// After chairman assigns slots, auto-configure and launch agents.
     /// Bridges cockpit assignments to dashboard terminal slots.
     private func autoLaunchAssignedSlots(_ assignedSlots: [AgentSlot], projectPath: String) async {
-        guard let ptyRunner = ptyRunner else {
+        guard let runner = ptyProcessRunner else {
             logger.warning("No PTY runner available — slots created but not auto-launched")
             return
         }
@@ -848,10 +851,6 @@ final class CockpitViewModel {
 
                 // Launch agent via PTY
                 let slotIndex = slot.slotIndex
-                guard let runner = ptyRunner as? PTYProcessRunner else {
-                    logger.warning("PTY runner not available as PTYProcessRunner")
-                    continue
-                }
                 let processId = try await runner.launch(
                     executable: adapter.executablePath,
                     arguments: adapter.launchArguments(worktreePath: worktreePath.path),

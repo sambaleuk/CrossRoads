@@ -115,6 +115,7 @@ final class AppState {
                     conductorService: conductorService,
                     repository: repository,
                     bus: bus,
+                    ptyProcessRunner: services.ptyRunner,
                     gateRepo: gateRepo,
                     costRepo: costRepo
                 )
