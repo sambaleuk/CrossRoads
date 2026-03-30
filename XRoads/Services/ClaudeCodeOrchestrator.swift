@@ -291,10 +291,12 @@ actor ClaudeCodeOrchestrator {
         }
 
         // Build arguments for headless mode
+        // --verbose is REQUIRED with --output-format stream-json in Claude Code 2.1.87+
         var arguments: [String] = [
             "-p", prompt,
             "--agent", agentName,
-            "--output-format", "stream-json"
+            "--output-format", "stream-json",
+            "--verbose"
         ]
 
         // Resume support: use --resume if we have a previous session ID
