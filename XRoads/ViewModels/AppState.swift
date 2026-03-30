@@ -121,6 +121,39 @@ final class AppState {
                 )
                 cockpitViewModel = vm
 
+                // Listen for cockpit slot launches → sync to dashboard TerminalSlots
+                NotificationCenter.default.addObserver(
+                    forName: .cockpitSlotLaunched,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let slotIndex = info["slotIndex"] as? Int,
+                          let agentTypeStr = info["agentType"] as? String,
+                          let branchName = info["branchName"] as? String,
+                          let processId = info["processId"] as? UUID,
+                          let worktreePath = info["worktreePath"] as? String
+                    else { return }
+
+                    let agentType = AgentType(rawValue: agentTypeStr) ?? .claude
+                    // Map cockpit slotIndex (0-based) to dashboard slotNumber (1-based)
+                    let slotNumber = slotIndex + 1
+
+                    if let idx = self.terminalSlots.firstIndex(where: { $0.slotNumber == slotNumber }) {
+                        self.terminalSlots[idx].agentType = agentType
+                        self.terminalSlots[idx].actionType = .implement
+                        self.terminalSlots[idx].worktree = Worktree(
+                            path: worktreePath,
+                            branch: branchName
+                        )
+                        self.terminalSlots[idx].processId = processId
+                        self.terminalSlots[idx].status = .running
+                        self.terminalSlots[idx].currentTask = "Auto-launched by cockpit"
+                    }
+                    self.updateOrchestratorVisualState()
+                }
+
                 await vm.activate(projectPath: path)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")

@@ -787,20 +787,27 @@ final class CockpitViewModel {
             return
         }
 
+        print("🚀 [COCKPIT BRAIN] Auto-launching \(assignedSlots.count) agents...")
         logger.info("Auto-launching \(assignedSlots.count) agents from cockpit assignments...")
 
         for slot in assignedSlots {
             do {
+                print("🔧 [SLOT \(slot.slotIndex)] agentType='\(slot.agentType)' branch='\(slot.branchName ?? "nil")' status=\(slot.status)")
+
                 // Find the correct CLI adapter for this agent type
                 guard let agentType = AgentType(rawValue: slot.agentType) else {
+                    print("❌ [SLOT \(slot.slotIndex)] Unknown agent type: '\(slot.agentType)'")
                     logger.warning("Unknown agent type: \(slot.agentType) for slot \(slot.slotIndex)")
                     continue
                 }
 
                 let adapter = agentType.adapter()
+                print("🔍 [SLOT \(slot.slotIndex)] adapter.executablePath = \(adapter.executablePath)")
+                print("🔍 [SLOT \(slot.slotIndex)] adapter.isAvailable() = \(adapter.isAvailable())")
+
                 guard adapter.isAvailable() else {
+                    print("❌ [SLOT \(slot.slotIndex)] CLI not available at: \(adapter.executablePath)")
                     logger.warning("\(agentType.rawValue) CLI not available — skipping slot \(slot.slotIndex)")
-                    // Update slot status to error
                     var errorSlot = slot
                     errorSlot.status = .error
                     let _ = try? await repository.updateSlot(errorSlot)
@@ -815,6 +822,7 @@ final class CockpitViewModel {
                     .appendingPathComponent("\(repoURL.lastPathComponent)-\(branchName.replacingOccurrences(of: "/", with: "-"))")
 
                 // Create git worktree (ignore error if already exists)
+                print("📂 [SLOT \(slot.slotIndex)] Creating worktree at: \(worktreePath.path) branch: \(branchName)")
                 let gitService = GitService()
                 do {
                     try await gitService.createWorktree(
@@ -822,7 +830,9 @@ final class CockpitViewModel {
                         branch: branchName,
                         worktreePath: worktreePath.path
                     )
+                    print("✅ [SLOT \(slot.slotIndex)] Worktree created")
                 } catch {
+                    print("⚠️ [SLOT \(slot.slotIndex)] Worktree error: \(error.localizedDescription)")
                     logger.info("Worktree may already exist: \(error.localizedDescription)")
                 }
 
@@ -897,6 +907,19 @@ final class CockpitViewModel {
 
                 slotProcessIds[slot.id] = processId
                 logger.info("✅ Slot \(slot.slotIndex) auto-launched: \(agentType.rawValue) on \(branchName)")
+
+                // Notify dashboard to sync its TerminalSlot
+                NotificationCenter.default.post(
+                    name: .cockpitSlotLaunched,
+                    object: nil,
+                    userInfo: [
+                        "slotIndex": slot.slotIndex,
+                        "agentType": agentType.rawValue,
+                        "branchName": branchName,
+                        "processId": processId,
+                        "worktreePath": worktreePath.path,
+                    ]
+                )
 
                 // Small delay between launches
                 try? await Task.sleep(for: .milliseconds(300))

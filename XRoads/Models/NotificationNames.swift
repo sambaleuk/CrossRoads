@@ -53,4 +53,9 @@ extension Notification.Name {
     /// Notification to open slot configuration sheet (Phase 2: Chat Integration)
     /// UserInfo keys: slotNumber (String), agentType (String?), actionType (String?)
     static let openSlotConfiguration = Notification.Name("openSlotConfiguration")
+
+    /// Posted by CockpitViewModel when slots are auto-launched.
+    /// UserInfo: "slotIndex" (Int), "agentType" (String), "branchName" (String),
+    /// "processId" (UUID), "worktreePath" (String), "status" (String)
+    static let cockpitSlotLaunched = Notification.Name("cockpitSlotLaunched")
 }
