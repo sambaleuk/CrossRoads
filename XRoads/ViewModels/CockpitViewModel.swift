@@ -114,6 +114,11 @@ final class CockpitViewModel {
     /// PRD-S08: Claude Code native orchestrator (lazy-initialized from ptyProcessRunner)
     private var orchestrator: ClaudeCodeOrchestrator?
 
+    /// PRD-S09: Cockpit brain headless session reference
+    private var cockpitBrainSession: HeadlessSession?
+    /// PRD-S09: Cockpit brain process ID for lifecycle management
+    private var cockpitBrainProcessId: UUID?
+
     /// Task for chairman brief polling
     private var chairmanBriefTask: Task<Void, Never>?
     /// Task for pending gate polling (US-003)
@@ -248,6 +253,9 @@ final class CockpitViewModel {
             startHeartbeatPolling()
             startBudgetPolling()
 
+            // Step 10 (PRD-S09): Launch cockpit brain Claude Code session
+            await startCockpitBrain(projectPath: projectPath)
+
             isLoading = false
             logger.info("Cockpit activated with \(assignedSlots.count) slots")
         } catch {
@@ -327,6 +335,9 @@ final class CockpitViewModel {
         guard let current = session,
               current.status == .active || current.status == .paused else { return }
 
+        // PRD-S09: Stop cockpit brain before closing session
+        await stopCockpitBrain()
+
         do {
             let closed = try await lifecycleManager.close(
                 session: current,
@@ -373,6 +384,131 @@ final class CockpitViewModel {
         } catch {
             errorMessage = error.localizedDescription
             logger.error("Close failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Cockpit Brain Lifecycle (PRD-S09)
+
+    /// Starts the cockpit brain Claude Code session.
+    ///
+    /// Generates agent definitions (cockpit-brain.md, meta-monitor.md, transverse-producer.md)
+    /// and launches the brain as a long-running headless session. Output is parsed and routed
+    /// to .cockpitBrainOutput notifications for the Brain panel and MCP logs.
+    private func startCockpitBrain(projectPath: String) async {
+        guard let runner = ptyProcessRunner else {
+            logger.info("No PTY runner — cockpit brain not launched (offline mode)")
+            return
+        }
+
+        // Initialize orchestrator if needed
+        if orchestrator == nil {
+            orchestrator = ClaudeCodeOrchestrator(ptyRunner: runner)
+        }
+
+        guard let orchestrator else { return }
+
+        do {
+            // Step 1: Generate agent definitions
+            try await orchestrator.generateCockpitBrainDefinition(
+                projectPath: projectPath,
+                cop: cockpitPlan,
+                activeSlots: slots
+            )
+
+            // Step 2: Launch cockpit brain session
+            let brainSession = try await orchestrator.launchCockpitSession(
+                projectPath: projectPath,
+                cop: cockpitPlan,
+                activeSlots: slots,
+                onOutput: { [weak self] rawOutput in
+                    self?.handleCockpitBrainRawOutput(rawOutput)
+                },
+                onTermination: { [weak self] exitCode in
+                    self?.handleCockpitBrainTermination(exitCode: exitCode)
+                },
+                onSessionId: { [weak self] sessionId in
+                    self?.logger.info("Cockpit brain session ID: \(sessionId)")
+                }
+            )
+
+            cockpitBrainSession = brainSession
+            cockpitBrainProcessId = brainSession.processId
+
+            // Notify observers
+            NotificationCenter.default.post(name: .cockpitBrainStarted, object: nil)
+            logger.info("Cockpit brain started successfully")
+        } catch {
+            // Non-fatal: cockpit works without brain session
+            logger.error("Cockpit brain launch failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Stops the cockpit brain session gracefully.
+    private func stopCockpitBrain() async {
+        guard let processId = cockpitBrainProcessId, let orchestrator else {
+            return
+        }
+
+        await orchestrator.stopCockpitSession(processId: processId)
+        cockpitBrainSession = nil
+        cockpitBrainProcessId = nil
+
+        NotificationCenter.default.post(name: .cockpitBrainStopped, object: nil)
+        logger.info("Cockpit brain stopped")
+    }
+
+    /// Handles raw output from the cockpit brain stream-json, categorizes it,
+    /// and posts .cockpitBrainOutput notifications.
+    private func handleCockpitBrainRawOutput(_ rawOutput: String) {
+        // Parse JSON lines from the raw output
+        let lines = rawOutput.components(separatedBy: "\n")
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty,
+                  let data = trimmed.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                continue
+            }
+
+            // Categorize the event
+            guard let categorized = ClaudeCodeOrchestrator.categorizeBrainEvent(json) else {
+                continue
+            }
+
+            // Post notification for Brain panel and logs
+            NotificationCenter.default.post(
+                name: .cockpitBrainOutput,
+                object: nil,
+                userInfo: [
+                    "type": categorized.type,
+                    "content": categorized.content,
+                    "timestamp": Date()
+                ]
+            )
+        }
+    }
+
+    /// Handles cockpit brain process termination.
+    private func handleCockpitBrainTermination(exitCode: Int32) {
+        cockpitBrainSession = nil
+        cockpitBrainProcessId = nil
+
+        NotificationCenter.default.post(name: .cockpitBrainStopped, object: nil)
+
+        if exitCode != 0 {
+            logger.warning("Cockpit brain exited with code \(exitCode)")
+            // Post an error entry to the brain panel
+            NotificationCenter.default.post(
+                name: .cockpitBrainOutput,
+                object: nil,
+                userInfo: [
+                    "type": "error",
+                    "content": "Brain process exited with code \(exitCode)",
+                    "timestamp": Date()
+                ]
+            )
+        } else {
+            logger.info("Cockpit brain exited normally")
         }
     }
 

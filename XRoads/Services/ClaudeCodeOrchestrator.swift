@@ -401,6 +401,337 @@ actor ClaudeCodeOrchestrator {
         logger.info("Injected initial memories for slot \(slotNumber)")
     }
 
+    // MARK: - Cockpit Brain Definition (PRD-S09 US-001)
+
+    /// Generates .claude/agents/cockpit-brain.md, meta-monitor.md, and transverse-producer.md.
+    ///
+    /// - Parameters:
+    ///   - projectPath: Path to the main project repository
+    ///   - cop: Current cockpit orchestration plan (optional)
+    ///   - activeSlots: Currently assigned dev slots
+    func generateCockpitBrainDefinition(
+        projectPath: String,
+        cop: CockpitOrchestrationPlan?,
+        activeSlots: [AgentSlot]
+    ) throws {
+        let agentsDir = URL(fileURLWithPath: projectPath)
+            .appendingPathComponent(".claude")
+            .appendingPathComponent("agents")
+
+        try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+
+        let projectName = cop?.projectName ?? URL(fileURLWithPath: projectPath).lastPathComponent
+
+        // Build active slots section
+        var slotLines = ""
+        if activeSlots.isEmpty {
+            slotLines = "No dev slots currently active."
+        } else {
+            for slot in activeSlots {
+                let branch = slot.branchName ?? "unassigned"
+                let task = slot.currentTask ?? "no task"
+                slotLines += "- Slot \(slot.slotIndex + 1) (\(slot.agentType)) on branch `\(branch)` — task: \(task)\n"
+            }
+        }
+
+        // Build PRD section
+        var prdSection = "No active PRD. Monitor for new prd.json files."
+        let prdPath = URL(fileURLWithPath: projectPath).appendingPathComponent("prd.json")
+        if FileManager.default.fileExists(atPath: prdPath.path),
+           let prdData = try? Data(contentsOf: prdPath),
+           let prd = try? JSONSerialization.jsonObject(with: prdData) as? [String: Any] {
+            let featureName = (prd["feature_name"] as? String) ?? "unknown"
+            let stories = (prd["user_stories"] as? [[String: Any]]) ?? []
+            let doneCount = stories.filter { ($0["status"] as? String) == "done" }.count
+            prdSection = "Feature: \(featureName) — \(stories.count) stories (\(doneCount) done, \(stories.count - doneCount) remaining)"
+        }
+
+        // --- cockpit-brain.md ---
+        let cockpitBrainContent = """
+        ---
+        name: cockpit-brain
+        description: "Autonomous project orchestrator — observes dev agents, manages quality, produces transverse deliverables"
+        tools:
+          - Read
+          - Edit
+          - Bash
+          - Glob
+          - Grep
+          - Write
+          - WebSearch
+          - Agent(meta-monitor, transverse-producer)
+        model: inherit
+        permissionMode: auto
+        memory: project
+        background: true
+        ---
+
+        # Cockpit Brain — XRoads Project Orchestrator
+
+        You are the autonomous brain of the XRoads orchestration cockpit for project **\(projectName)**.
+
+        ## Your Mission
+        You observe, analyze, and support the development process. You are NOT a dev agent — you are the CTO watching over everything.
+
+        ## Active Dev Slots
+        \(slotLines)
+
+        ## Current PRD
+        \(prdSection)
+
+        ## Your Responsibilities
+
+        ### 1. Monitor Dev Agents (Priority: HIGH)
+        Use `/loop 30s` to periodically:
+        - Run `git worktree list` to see active worktrees
+        - For each dev worktree: `git -C {path} diff --stat` to see changes
+        - Check prd.json story statuses if it exists
+        - Report any issues (test failures, conflicts, stalled agents)
+
+        ### 2. Detect PRDs (Priority: HIGH)
+        - Watch for prd.json and prd-*.json in project root
+        - When found: read it, understand the feature, map stories to slots
+        - Adjust your support strategy based on the PRD domain
+
+        ### 3. Spawn Support Agents (Priority: MEDIUM)
+        Use @meta-monitor when dev agents are active — it watches code quality
+        Use @transverse-producer when devs are 50%+ done or when idle — it creates deliverables
+        Spawn specialists when the domain requires it (security for auth, pricing for SaaS)
+
+        ### 4. Produce When Idle (Priority: LOW)
+        When no dev agents are running:
+        - Scan project for improvements
+        - Update README if outdated
+        - Generate project health report at .crossroads/deliverables/health-report.md
+        - Use `/loop 5m` in idle mode
+
+        ### 5. React to Events
+        - Test failure → analyze and log recommendation
+        - Merge conflict → alert user
+        - Budget > 80% → recommend model switch
+        - All stories done → generate retro summary
+
+        ## Output Rules
+        - Always explain your reasoning before acting
+        - Log important observations (they appear in the MCP LOGS panel)
+        - Write deliverables to .crossroads/deliverables/
+        - Never modify dev agent worktrees — only READ them
+
+        ## Start Now
+        Begin by scanning the project structure and checking for active dev worktrees.
+        """
+
+        let brainPath = agentsDir.appendingPathComponent("cockpit-brain.md")
+        try cockpitBrainContent.write(to: brainPath, atomically: true, encoding: .utf8)
+
+        // --- meta-monitor.md ---
+        let metaMonitorContent = """
+        ---
+        name: meta-monitor
+        description: "Code quality monitor — watches dev worktrees, runs tests, detects conflicts"
+        tools:
+          - Read
+          - Bash
+          - Glob
+          - Grep
+        model: inherit
+        permissionMode: auto
+        isolation: false
+        ---
+
+        # Meta Monitor — Code Quality Watcher
+
+        You monitor all active dev worktrees for the **\(projectName)** project.
+
+        ## Responsibilities
+        - Run tests in each active worktree
+        - Check for code quality issues (linting, formatting)
+        - Detect potential merge conflicts between worktrees
+        - Flag stalled agents (no commits in last 10 minutes)
+        - Report findings back to the cockpit brain
+
+        ## Rules
+        - NEVER modify any files — you are read-only + test runner
+        - Report findings clearly with file paths and line numbers
+        - Prioritize: test failures > conflicts > quality issues > staleness
+        """
+
+        let metaMonitorPath = agentsDir.appendingPathComponent("meta-monitor.md")
+        try metaMonitorContent.write(to: metaMonitorPath, atomically: true, encoding: .utf8)
+
+        // --- transverse-producer.md ---
+        let transverseContent = """
+        ---
+        name: transverse-producer
+        description: "Produces non-code deliverables — documentation, strategy, marketing copy"
+        tools:
+          - Read
+          - Write
+          - WebSearch
+        model: inherit
+        permissionMode: auto
+        isolation: false
+        ---
+
+        # Transverse Producer — Deliverables Generator
+
+        You produce non-code deliverables for the **\(projectName)** project.
+
+        ## Responsibilities
+        - Create documentation (README, deploy guides, API reference)
+        - Generate marketing copy (landing page, value proposition)
+        - Write strategy documents (go-to-market, pricing model)
+        - Produce research artifacts (competitive analysis, user personas)
+
+        ## Rules
+        - Write all deliverables to `.crossroads/deliverables/`
+        - Each deliverable must be actionable and specific
+        - Reference actual project features and domain terminology
+        - Create a `_index.md` summarizing all deliverables produced
+        """
+
+        let transversePath = agentsDir.appendingPathComponent("transverse-producer.md")
+        try transverseContent.write(to: transversePath, atomically: true, encoding: .utf8)
+
+        logger.info("Generated cockpit brain + support agent definitions for \(projectName)")
+    }
+
+    // MARK: - Cockpit Session Launch (PRD-S09 US-002)
+
+    /// Launches the cockpit brain as a long-running Claude Code headless session.
+    ///
+    /// - Parameters:
+    ///   - projectPath: Path to the main project repository
+    ///   - cop: Current cockpit orchestration plan (optional)
+    ///   - activeSlots: Currently assigned dev slots
+    ///   - onOutput: Callback for raw output lines
+    ///   - onTermination: Callback when the process terminates
+    ///   - onSessionId: Callback when a session_id is extracted
+    /// - Returns: A HeadlessSession for the cockpit brain
+    func launchCockpitSession(
+        projectPath: String,
+        cop: CockpitOrchestrationPlan?,
+        activeSlots: [AgentSlot],
+        onOutput: @escaping @MainActor @Sendable (String) -> Void,
+        onTermination: @escaping @MainActor @Sendable (Int32) -> Void,
+        onSessionId: @escaping @MainActor @Sendable (String) -> Void
+    ) async throws -> HeadlessSession {
+        let projectName = cop?.projectName ?? URL(fileURLWithPath: projectPath).lastPathComponent
+
+        // Build the initial context prompt
+        var contextParts: [String] = []
+        contextParts.append("You are the cockpit brain for project '\(projectName)' at \(projectPath).")
+
+        if !activeSlots.isEmpty {
+            contextParts.append("Active dev slots:")
+            for slot in activeSlots {
+                let branch = slot.branchName ?? "unassigned"
+                let task = slot.currentTask ?? "no task"
+                contextParts.append("  - Slot \(slot.slotIndex + 1) (\(slot.agentType)): \(task) on branch \(branch)")
+            }
+        } else {
+            contextParts.append("No dev slots currently running. Enter idle/initiative mode.")
+        }
+
+        if let cop {
+            contextParts.append("Domain: \(cop.domain), Type: \(cop.projectType), Market: \(cop.marketContext)")
+        }
+
+        contextParts.append("Begin monitoring. Scan project structure, check for PRDs, and watch dev worktrees.")
+
+        let contextPrompt = contextParts.joined(separator: "\n")
+
+        // Use slotIndex -1 to distinguish cockpit brain from dev slots
+        let session = try await launchHeadless(
+            slotIndex: -1,
+            agentName: "cockpit-brain",
+            prompt: contextPrompt,
+            worktreePath: projectPath,
+            projectPath: projectPath,
+            onOutput: onOutput,
+            onTermination: onTermination,
+            onSessionId: onSessionId
+        )
+
+        logger.info("Cockpit brain session launched for \(projectName)")
+        return session
+    }
+
+    /// Terminates the cockpit brain session gracefully.
+    ///
+    /// - Parameter processId: The process UUID from the HeadlessSession
+    func stopCockpitSession(processId: UUID) async {
+        do {
+            try await ptyRunner.terminate(id: processId)
+            logger.info("Cockpit brain session terminated")
+        } catch {
+            logger.warning("Failed to terminate cockpit brain: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Cockpit Brain Output Parsing (PRD-S09 US-008)
+
+    /// Categorizes a stream-json event from the cockpit brain into a brain entry type.
+    ///
+    /// - Parameter event: Parsed JSON dictionary from stream-json
+    /// - Returns: Tuple of (type, content) or nil if event should be ignored
+    static func categorizeBrainEvent(_ event: [String: Any]) -> (type: String, content: String)? {
+        guard let eventType = event["type"] as? String else { return nil }
+
+        switch eventType {
+        case "assistant":
+            guard let message = event["message"] as? [String: Any],
+                  let contentBlocks = message["content"] as? [[String: Any]] else { return nil }
+
+            for block in contentBlocks {
+                guard let text = block["text"] as? String else { continue }
+                let lower = text.lowercased()
+
+                // Categorize by content keywords
+                if lower.contains("spawning") || lower.contains("launching") || lower.contains("activating") {
+                    return (type: "subagent", content: text)
+                }
+                if lower.contains("detected") || lower.contains("decided") || lower.contains("switching") || lower.contains("recommending") {
+                    return (type: "decision", content: text)
+                }
+                if lower.contains("monitoring") || lower.contains("checking") || lower.contains("scanning") || lower.contains("polling") {
+                    return (type: "loop", content: text)
+                }
+                // Default assistant text is thinking
+                return (type: "thinking", content: text)
+            }
+            return nil
+
+        case "tool_use":
+            let toolName = (event["name"] as? String) ?? "unknown"
+            var detail = toolName
+            if let input = event["tool_input"] as? [String: Any] {
+                if let filePath = input["file_path"] as? String {
+                    detail = "\(toolName) \(filePath)"
+                } else if let command = input["command"] as? String {
+                    let truncated = String(command.prefix(80))
+                    detail = "\(toolName) \(truncated)"
+                } else if let pattern = input["pattern"] as? String {
+                    detail = "\(toolName) \(pattern)"
+                }
+            }
+            return (type: "action", content: detail)
+
+        case "result":
+            if let resultText = event["result"] as? String, !resultText.isEmpty {
+                return (type: "thinking", content: resultText)
+            }
+            return nil
+
+        case "error":
+            let errorMsg = (event["error"] as? String) ?? "Unknown error"
+            return (type: "error", content: errorMsg)
+
+        default:
+            return nil
+        }
+    }
+
     // MARK: - Private Helpers
 
     /// Derives a short skill name from the slot's agent type and task.

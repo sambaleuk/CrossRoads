@@ -213,6 +213,27 @@ final class AppState {
                     ))
                 }
 
+                // PRD-S09: Listen for cockpit brain output → route to MCP logs
+                NotificationCenter.default.addObserver(
+                    forName: .cockpitBrainOutput,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let content = info["content"] as? String,
+                          let brainType = info["type"] as? String
+                    else { return }
+
+                    let level: LogLevel = brainType == "error" ? .error : .info
+                    self.addLog(LogEntry(
+                        level: level,
+                        source: "cockpit-brain",
+                        worktree: nil,
+                        message: "[\(brainType)] \(content)"
+                    ))
+                }
+
                 await vm.activate(projectPath: path)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")

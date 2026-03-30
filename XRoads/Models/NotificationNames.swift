@@ -64,4 +64,17 @@ extension Notification.Name {
     /// Posted when a cockpit-launched agent terminates.
     /// UserInfo: "slotNumber" (Int), "exitCode" (Int32)
     static let cockpitSlotTerminated = Notification.Name("cockpitSlotTerminated")
+
+    // MARK: - Cockpit Brain (PRD-S09)
+
+    /// Posted when the cockpit brain Claude Code session starts.
+    static let cockpitBrainStarted = Notification.Name("cockpitBrainStarted")
+
+    /// Posted when the cockpit brain Claude Code session stops.
+    static let cockpitBrainStopped = Notification.Name("cockpitBrainStopped")
+
+    /// Posted when the cockpit brain produces output.
+    /// UserInfo: "type" (String: thinking/action/decision/loop/subagent/error),
+    ///           "content" (String), "timestamp" (Date)
+    static let cockpitBrainOutput = Notification.Name("cockpitBrainOutput")
 }
