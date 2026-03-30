@@ -869,6 +869,8 @@ final class CockpitViewModel {
 
                 // Launch agent via PTY
                 let slotIndex = slot.slotIndex
+                // Route PTY output to dashboard TerminalSlot via notification
+                let slotNumber = slotIndex + 1 // dashboard is 1-based
                 let processId = try await runner.launch(
                     executable: adapter.executablePath,
                     arguments: adapter.launchArguments(worktreePath: worktreePath.path),
@@ -879,17 +881,30 @@ final class CockpitViewModel {
                         "CROSSROADS_AGENT": agentType.rawValue,
                         "CROSSROADS_BRANCH": branchName,
                     ],
-                    onOutput: { [weak self] output in
-                        Task { @MainActor [weak self] in
-                            self?.logger.debug("Slot \(slotIndex): \(output.prefix(100))")
+                    onOutput: { output in
+                        // Route output to dashboard slot terminal
+                        Task { @MainActor in
+                            NotificationCenter.default.post(
+                                name: .cockpitSlotOutput,
+                                object: nil,
+                                userInfo: [
+                                    "slotNumber": slotNumber,
+                                    "output": output,
+                                    "agentType": agentType.rawValue,
+                                ]
+                            )
                         }
                     },
-                    onTermination: { [weak self] (exitCode: Int32) in
-                        Task { @MainActor [weak self] in
-                            self?.logger.info("Slot \(slotIndex) terminated with code \(exitCode)")
-                            if let idx = self?.slots.firstIndex(where: { $0.slotIndex == slotIndex }) {
-                                self?.slots[idx].status = exitCode == 0 ? .done : .error
-                            }
+                    onTermination: { (exitCode: Int32) in
+                        Task { @MainActor in
+                            NotificationCenter.default.post(
+                                name: .cockpitSlotTerminated,
+                                object: nil,
+                                userInfo: [
+                                    "slotNumber": slotNumber,
+                                    "exitCode": exitCode,
+                                ]
+                            )
                         }
                     }
                 )

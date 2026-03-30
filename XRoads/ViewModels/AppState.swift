@@ -121,6 +121,37 @@ final class AppState {
                 )
                 cockpitViewModel = vm
 
+                // Listen for cockpit slot output → route to dashboard TerminalSlot logs
+                NotificationCenter.default.addObserver(
+                    forName: .cockpitSlotOutput,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let slotNumber = info["slotNumber"] as? Int,
+                          let output = info["output"] as? String,
+                          let agentType = info["agentType"] as? String
+                    else { return }
+                    if let idx = self.terminalSlots.firstIndex(where: { $0.slotNumber == slotNumber }) {
+                        self.appendSlotOutput(slotNumber: slotNumber, output: output)
+                    }
+                }
+
+                // Listen for cockpit slot termination
+                NotificationCenter.default.addObserver(
+                    forName: .cockpitSlotTerminated,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let slotNumber = info["slotNumber"] as? Int,
+                          let exitCode = info["exitCode"] as? Int32
+                    else { return }
+                    self.handleSlotTermination(slotNumber: slotNumber, exitCode: exitCode)
+                }
+
                 // Listen for cockpit slot launches → sync to dashboard TerminalSlots
                 NotificationCenter.default.addObserver(
                     forName: .cockpitSlotLaunched,

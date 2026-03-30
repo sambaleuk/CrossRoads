@@ -55,7 +55,13 @@ extension Notification.Name {
     static let openSlotConfiguration = Notification.Name("openSlotConfiguration")
 
     /// Posted by CockpitViewModel when slots are auto-launched.
-    /// UserInfo: "slotIndex" (Int), "agentType" (String), "branchName" (String),
-    /// "processId" (UUID), "worktreePath" (String), "status" (String)
     static let cockpitSlotLaunched = Notification.Name("cockpitSlotLaunched")
+
+    /// Posted when a cockpit-launched agent produces PTY output.
+    /// UserInfo: "slotNumber" (Int), "output" (String), "agentType" (String)
+    static let cockpitSlotOutput = Notification.Name("cockpitSlotOutput")
+
+    /// Posted when a cockpit-launched agent terminates.
+    /// UserInfo: "slotNumber" (Int), "exitCode" (Int32)
+    static let cockpitSlotTerminated = Notification.Name("cockpitSlotTerminated")
 }
