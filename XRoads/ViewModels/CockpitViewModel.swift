@@ -821,19 +821,26 @@ final class CockpitViewModel {
                     .deletingLastPathComponent()
                     .appendingPathComponent("\(repoURL.lastPathComponent)-\(branchName.replacingOccurrences(of: "/", with: "-"))")
 
-                // Create git worktree (ignore error if already exists)
-                print("📂 [SLOT \(slot.slotIndex)] Creating worktree at: \(worktreePath.path) branch: \(branchName)")
+                // Prune stale worktrees + delete branch if exists, then create fresh
                 let gitService = GitService()
+                let _ = try? await gitService.pruneWorktrees(repoPath: projectPath)
+                let _ = try? await gitService.deleteBranch(name: branchName, repoPath: projectPath, force: true)
+
                 do {
                     try await gitService.createWorktree(
                         repoPath: projectPath,
                         branch: branchName,
                         worktreePath: worktreePath.path
                     )
-                    print("✅ [SLOT \(slot.slotIndex)] Worktree created")
+                    logger.info("Worktree created: \(worktreePath.path)")
                 } catch {
-                    print("⚠️ [SLOT \(slot.slotIndex)] Worktree error: \(error.localizedDescription)")
-                    logger.info("Worktree may already exist: \(error.localizedDescription)")
+                    // If worktree dir already exists, reuse it
+                    if FileManager.default.fileExists(atPath: worktreePath.path) {
+                        logger.info("Reusing existing worktree: \(worktreePath.path)")
+                    } else {
+                        logger.error("Worktree creation failed: \(error.localizedDescription)")
+                        throw error
+                    }
                 }
 
                 // Update slot to provisioning
