@@ -217,6 +217,9 @@ final class CockpitViewModel {
             // Step 5: Sequential slot reveal animation (500ms between each)
             await revealSlotsSequentially(assignedSlots)
 
+            // Step 5.5: Auto-launch agents in assigned slots
+            await autoLaunchAssignedSlots(assignedSlots, projectPath: projectPath)
+
             // Step 6: Start chairman brief refresh loop
             startChairmanBriefRefresh()
 
@@ -761,5 +764,144 @@ final class CockpitViewModel {
             try? await Task.sleep(for: .milliseconds(500))
             revealedSlotIds.insert(slot.id)
         }
+    }
+
+    // MARK: - Auto-Launch: Cockpit → Dashboard → Agent
+
+    /// After chairman assigns slots, auto-configure and launch agents.
+    /// Bridges cockpit assignments to dashboard terminal slots.
+    private func autoLaunchAssignedSlots(_ assignedSlots: [AgentSlot], projectPath: String) async {
+        guard let ptyRunner = ptyRunner else {
+            logger.warning("No PTY runner available — slots created but not auto-launched")
+            return
+        }
+
+        logger.info("Auto-launching \(assignedSlots.count) agents from cockpit assignments...")
+
+        for slot in assignedSlots {
+            do {
+                // Find the correct CLI adapter for this agent type
+                guard let agentType = AgentType(rawValue: slot.agentType) else {
+                    logger.warning("Unknown agent type: \(slot.agentType) for slot \(slot.slotIndex)")
+                    continue
+                }
+
+                let adapter = agentType.adapter()
+                guard adapter.isAvailable() else {
+                    logger.warning("\(agentType.rawValue) CLI not available — skipping slot \(slot.slotIndex)")
+                    // Update slot status to error
+                    var errorSlot = slot
+                    errorSlot.status = .error
+                    let _ = try? await repository.updateSlot(errorSlot)
+                    continue
+                }
+
+                // Create worktree for this slot
+                let repoURL = URL(fileURLWithPath: projectPath)
+                let branchName = slot.branchName ?? "xroads/slot-\(slot.slotIndex)"
+                let worktreePath = repoURL
+                    .deletingLastPathComponent()
+                    .appendingPathComponent("\(repoURL.lastPathComponent)-\(branchName.replacingOccurrences(of: "/", with: "-"))")
+
+                // Create git worktree (ignore error if already exists)
+                let gitService = GitService()
+                do {
+                    try await gitService.createWorktree(
+                        repoPath: projectPath,
+                        branch: branchName,
+                        worktreePath: worktreePath.path
+                    )
+                } catch {
+                    logger.info("Worktree may already exist: \(error.localizedDescription)")
+                }
+
+                // Update slot to provisioning
+                var provisioningSlot = slot
+                provisioningSlot.status = .provisioning
+                provisioningSlot.worktreePath = worktreePath.path
+                let _ = try? await repository.updateSlot(provisioningSlot)
+
+                // Build task description for AGENT.md
+                let taskDesc = slot.currentTask ?? "Implement assigned stories"
+                let agentMdContent = """
+                    # Agent Brief — Slot \(slot.slotIndex + 1)
+
+                    ## Mission
+                    \(taskDesc)
+
+                    ## Context
+                    - Project: \(repoURL.lastPathComponent)
+                    - Branch: \(branchName)
+                    - Agent: \(agentType.rawValue)
+                    - Worktree: \(worktreePath.path)
+
+                    ## Instructions
+                    1. Read the codebase and understand the project structure
+                    2. Implement the assigned task with tests
+                    3. Commit changes with clear messages
+                    4. Update progress regularly
+                    """
+
+                // Write AGENT.md to worktree
+                let agentMdPath = worktreePath.appendingPathComponent("AGENT.md")
+                try? agentMdContent.write(to: agentMdPath, atomically: true, encoding: .utf8)
+
+                // Launch agent via PTY
+                let slotIndex = slot.slotIndex
+                guard let runner = ptyRunner as? PTYProcessRunner else {
+                    logger.warning("PTY runner not available as PTYProcessRunner")
+                    continue
+                }
+                let processId = try await runner.launch(
+                    executable: adapter.executablePath,
+                    arguments: adapter.launchArguments(worktreePath: worktreePath.path),
+                    workingDirectory: worktreePath.path,
+                    environment: [
+                        "CROSSROADS_SESSION_ID": self.session?.id.uuidString ?? "",
+                        "CROSSROADS_SLOT": String(slotIndex),
+                        "CROSSROADS_AGENT": agentType.rawValue,
+                        "CROSSROADS_BRANCH": branchName,
+                    ],
+                    onOutput: { [weak self] output in
+                        Task { @MainActor [weak self] in
+                            self?.logger.debug("Slot \(slotIndex): \(output.prefix(100))")
+                        }
+                    },
+                    onTermination: { [weak self] (exitCode: Int32) in
+                        Task { @MainActor [weak self] in
+                            self?.logger.info("Slot \(slotIndex) terminated with code \(exitCode)")
+                            if let idx = self?.slots.firstIndex(where: { $0.slotIndex == slotIndex }) {
+                                self?.slots[idx].status = exitCode == 0 ? .done : .error
+                            }
+                        }
+                    }
+                )
+
+                // Update slot to running
+                var runningSlot = provisioningSlot
+                runningSlot.status = .running
+                let _ = try? await repository.updateSlot(runningSlot)
+
+                // Update local state
+                if let idx = slots.firstIndex(where: { $0.id == slot.id }) {
+                    slots[idx].status = .running
+                    slots[idx].worktreePath = worktreePath.path
+                }
+
+                slotProcessIds[slot.id] = processId
+                logger.info("✅ Slot \(slot.slotIndex) auto-launched: \(agentType.rawValue) on \(branchName)")
+
+                // Small delay between launches
+                try? await Task.sleep(for: .milliseconds(300))
+
+            } catch {
+                logger.error("Failed to auto-launch slot \(slot.slotIndex): \(error.localizedDescription)")
+                var errorSlot = slot
+                errorSlot.status = .error
+                let _ = try? await repository.updateSlot(errorSlot)
+            }
+        }
+
+        logger.info("Auto-launch complete: \(self.slots.filter { $0.status == .running }.count) agents running")
     }
 }
