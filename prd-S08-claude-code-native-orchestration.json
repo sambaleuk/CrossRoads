@@ -1,0 +1,138 @@
+{
+  "$schema": "modragor-prd-v1",
+  "feature_name": "Claude Code Native Orchestration (Swift)",
+  "description": "Replace manual PTY spawning with native Claude Code features: subagent definitions with worktree isolation, Agent SDK for programmatic control, hooks for safety/quality, auto permission mode, /loop for monitoring, persistent memory per slot. The cockpit becomes an orchestrator OF Claude Code sessions, not a PTY wrapper.",
+  "branch": "feat/S08-claude-native",
+  "created_at": "2026-03-30",
+  "status": "pending",
+  "goals": [
+    "Replace PTY spawn with Claude Code subagent definitions (isolation: worktree, background: true)",
+    "Generate .claude/agents/ files dynamically from chairman assignments",
+    "Use auto permission mode for full autonomy with safety classifier",
+    "Implement hooks for SafeExecutor, quality gates, and merge evaluation",
+    "Use /loop for heartbeat monitoring instead of custom polling",
+    "Enable persistent memory per agent slot across sessions",
+    "Cockpit drives Claude Code sessions via headless mode (-p flag)"
+  ],
+  "non_goals": [
+    "No Agent Teams (experimental, one team per session limit) — keep our own multi-slot system",
+    "No cloud scheduled tasks for v1 — local execution first",
+    "No Agent SDK rewrite of the full backend — incremental adoption"
+  ],
+  "user_stories": [
+    {
+      "id": "US-001",
+      "title": "Dynamic subagent definition generator",
+      "description": "When the cockpit assigns slots, auto-generate .claude/agents/ markdown files for each slot. Each file contains: name (slot-{N}-{skill}), description (from chairman taskDescription), tools (Read, Edit, Bash, Glob, Grep — scoped by role), model (claude for complex, haiku for simple via cost routing), permissionMode (auto), isolation (worktree), memory (project), background (true), hooks (Stop hook to verify tests pass). The generator reads the chairman output + COP + PRD to produce rich agent definitions. Files written to {projectPath}/.claude/agents/. Existing files overwritten on each session activation.",
+      "status": "pending",
+      "tests": [
+        "agent file generated for each slot assignment",
+        "isolation: worktree present in each file",
+        "memory: project enables persistent knowledge",
+        "tools scoped by slot role (backend gets Bash, frontend gets Edit)",
+        "Stop hook included for test verification"
+      ],
+      "entity_touches": [],
+      "priority": "high"
+    },
+    {
+      "id": "US-002",
+      "title": "Headless Claude Code launcher",
+      "description": "Replace direct PTY spawning with Claude Code headless mode. For each slot: launch `claude -p <prompt> --agent slot-{N}-{skill} --output-format stream-json --continue` in the slot's worktree. The prompt includes: AGENT.md content (chairman brief, task, stories, coordination rules). Output format stream-json gives structured events: assistant messages, tool calls, tool results, session_id. Parse the stream-json output to: route text to terminal slot view, detect tool calls for SafeExecutor, capture session_id for resume. Resume support: store session_id per slot, use `--resume <id>` on restart/recovery.",
+      "status": "pending",
+      "tests": [
+        "claude launched in headless mode per slot",
+        "stream-json output parsed correctly",
+        "session_id captured and stored",
+        "resume works after restart",
+        "output routes to terminal slot view"
+      ],
+      "entity_touches": [],
+      "priority": "high"
+    },
+    {
+      "id": "US-003",
+      "title": "Hooks configuration for safety and quality",
+      "description": "Generate .claude/settings.json (or .claude/settings.local.json) with hooks configuration for each orchestration session. Hooks: 1) PreToolUse: block dangerous operations (rm -rf, DROP TABLE, force push) — replaces our SafeExecutor pattern matching with Claude's native hook system. Use command type that checks against our 13 danger patterns. 2) PostToolUse on Edit|Write: trigger linter/formatter if configured. 3) Stop hook (agent type): spawns a verification subagent that checks if tests pass and all assigned stories are complete before allowing the slot to finish. If not done, returns reason as next instruction — agent keeps working. 4) SubagentStop: when a slot finishes, notify the cockpit to evaluate merge readiness.",
+      "status": "pending",
+      "tests": [
+        "PreToolUse blocks rm -rf",
+        "Stop hook prevents premature completion",
+        "PostToolUse triggers formatter",
+        "hooks written to .claude/settings.local.json"
+      ],
+      "entity_touches": [],
+      "priority": "high"
+    },
+    {
+      "id": "US-004",
+      "title": "CLAUDE.md and rules generation",
+      "description": "Generate project-level .claude/CLAUDE.md and .claude/rules/ files from the cockpit context. CLAUDE.md contains: project description, tech stack (detected from package.json/Cargo.toml), coding conventions (from existing CLAUDE.md or detected), orchestration rules (commit prefix, branch isolation, no cross-worktree changes). Rules directory: backend.md (path-scoped to src/api/**, models/**, services/**), frontend.md (path-scoped to src/components/**, src/views/**), testing.md (path-scoped to tests/**, spec/**). Each rule file loaded only when the agent works on matching paths — keeps context lean. Import system: CLAUDE.md uses @prd.json to auto-load PRD context.",
+      "status": "pending",
+      "tests": [
+        "CLAUDE.md generated with project context",
+        "rules path-scoped correctly",
+        "PRD imported via @ syntax",
+        "existing CLAUDE.md preserved/merged"
+      ],
+      "entity_touches": [],
+      "priority": "high"
+    },
+    {
+      "id": "US-005",
+      "title": "Persistent agent memory integration",
+      "description": "Each slot's subagent definition includes `memory: project`. This means Claude Code auto-maintains a MEMORY.md per agent that accumulates knowledge across sessions. Replace our custom AgentMemoryRepository with this native feature for the execution layer. The cockpit reads .claude/agents/slot-{N}/MEMORY.md to display learnings in the Intelligence panel. On session start, the cockpit can inject initial memories from our LearningRecord/PerformanceProfile data into the agent's memory: 'This agent performed well on backend_rust (94% success)' or 'Struggled with TypeScript generics last session'. Memory survives across sessions automatically — no custom persistence needed.",
+      "status": "pending",
+      "tests": [
+        "subagent memory: project in definition",
+        "MEMORY.md created by Claude Code",
+        "cockpit reads and displays memories",
+        "initial memories injected from learning data"
+      ],
+      "entity_touches": [],
+      "priority": "medium"
+    },
+    {
+      "id": "US-006",
+      "title": "Loop-based monitoring (/loop replacement)",
+      "description": "Instead of our custom heartbeat polling, use Claude Code's native /loop within each agent session. After launching the agent with the main task prompt, send a follow-up: '/loop 30s check git status and report progress in JSON format'. The agent periodically checks: git diff stat, test results, story completion, and outputs structured progress. Parse the loop output from the stream-json to update: slot progress bar, heartbeat status, story completion count. Alternatively: use a separate monitoring subagent (meta-monitor.md) with isolation: worktree set to false (works in main repo) that runs '/loop 1m check all worktrees for progress'.",
+      "status": "pending",
+      "tests": [
+        "/loop command sent after task prompt",
+        "periodic progress parsed from output",
+        "slot progress bar updates",
+        "meta-monitor alternative works"
+      ],
+      "entity_touches": [],
+      "priority": "medium"
+    },
+    {
+      "id": "US-007",
+      "title": "Session resume and recovery",
+      "description": "Claude Code headless mode returns session_id in stream-json output. Store this session_id per slot in the CockpitSession/AgentSlot DB record. On app restart or crash recovery: instead of re-launching from scratch, use `claude -p 'Continue where you left off' --resume <session_id> --output-format stream-json`. The agent resumes with full conversation history + file state. If session_id is expired (>24h), fall back to fresh launch with previous progress injected via AGENT.md. This replaces our custom crash recovery with Claude Code's native session persistence.",
+      "status": "pending",
+      "tests": [
+        "session_id stored per slot",
+        "resume works after restart",
+        "expired session falls back to fresh launch",
+        "progress preserved on resume"
+      ],
+      "entity_touches": ["AgentSlot"],
+      "priority": "medium"
+    },
+    {
+      "id": "US-008",
+      "title": "Auto permission mode with cockpit safety overlay",
+      "description": "Set permissionMode: auto in subagent definitions. Claude's built-in safety classifier handles most decisions automatically. For additional XRoads-specific safety: configure PreToolUse hooks that check our SafeExecutor patterns. The cockpit UI shows a live feed of permission decisions from the auto classifier (approved/blocked) in the MCP LOGS panel. If the classifier blocks something the user wants to allow, they can update .claude/settings.local.json to whitelist specific patterns. The cockpit provides a UI to manage these allowlists without editing JSON manually.",
+      "status": "pending",
+      "tests": [
+        "auto mode set in agent definitions",
+        "classifier decisions visible in logs",
+        "PreToolUse hooks catch our 13 patterns",
+        "allowlist UI in cockpit settings"
+      ],
+      "entity_touches": [],
+      "priority": "medium"
+    }
+  ]
+}
