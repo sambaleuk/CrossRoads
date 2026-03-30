@@ -842,26 +842,51 @@ final class CockpitViewModel {
                 provisioningSlot.worktreePath = worktreePath.path
                 let _ = try? await repository.updateSlot(provisioningSlot)
 
-                // Build task description for AGENT.md
+                // Build rich AGENT.md with chairman context
+                let chairmanBrief = session?.chairmanBrief ?? ""
                 let taskDesc = slot.currentTask ?? "Implement assigned stories"
+                let skillName = slot.skillId != nil ? "specialized" : "general"
+                let projectName = repoURL.lastPathComponent
+
                 let agentMdContent = """
-                    # Agent Brief — Slot \(slot.slotIndex + 1)
+                # Agent Brief — Slot \(slot.slotIndex + 1) [\(agentType.displayName)]
 
-                    ## Mission
-                    \(taskDesc)
+                ## Mission
+                \(taskDesc)
 
-                    ## Context
-                    - Project: \(repoURL.lastPathComponent)
-                    - Branch: \(branchName)
-                    - Agent: \(agentType.rawValue)
-                    - Worktree: \(worktreePath.path)
+                ## Project Context
+                - **Project**: \(projectName)
+                - **Branch**: `\(branchName)`
+                - **Agent**: \(agentType.displayName)
+                - **Worktree**: `\(worktreePath.path)`
+                - **Main Repo**: `\(projectPath)`
 
-                    ## Instructions
-                    1. Read the codebase and understand the project structure
-                    2. Implement the assigned task with tests
-                    3. Commit changes with clear messages
-                    4. Update progress regularly
-                    """
+                ## Chairman Brief
+                \(chairmanBrief)
+
+                ## Your Role
+                You are Slot \(slot.slotIndex + 1) in a multi-agent orchestration. Other agents are working in parallel on different branches. DO NOT touch files outside your assigned scope.
+
+                ## Working Rules
+                1. **Stay in your worktree** — all work happens at `\(worktreePath.path)`
+                2. **Read the codebase first** — understand the project structure before writing code
+                3. **Implement your assigned task**: \(taskDesc)
+                4. **Write tests** for every feature you implement
+                5. **Run tests** and ensure they pass before committing
+                6. **Commit with clear messages** — prefix with your slot: `[slot-\(slot.slotIndex + 1)] description`
+                7. **DO NOT** run destructive commands (rm -rf, git push --force, DROP TABLE)
+                8. **DO NOT** modify files that other agents are likely working on
+                9. **Update progress** — write learnings to `progress.txt`
+
+                ## Coordination
+                - Other agents are working on parallel branches
+                - Your branch: `\(branchName)`
+                - Merge coordination is handled by the orchestrator — just commit to your branch
+                - If you encounter a blocker, write it to `progress.txt`
+
+                ## Start Now
+                Begin by reading the project structure, then implement your assigned task with tests.
+                """
 
                 // Write AGENT.md to worktree
                 let agentMdPath = worktreePath.appendingPathComponent("AGENT.md")
@@ -910,16 +935,21 @@ final class CockpitViewModel {
                 )
 
                 // Send the task prompt to the agent via stdin
-                let agentTask = slot.currentTask ?? "Implement assigned stories"
                 let prompt = """
-                    Read the AGENT.md file in this directory for your full mission brief.
+                Read the AGENT.md file in this directory for your full mission brief and instructions.
 
-                    Project: \(repoURL.lastPathComponent)
-                    Branch: \(branchName)
-                    Task: \(agentTask)
+                You are Slot \(slot.slotIndex + 1) (\(agentType.displayName)) working on project \(projectName).
+                Your task: \(taskDesc)
+                Your branch: \(branchName)
 
-                    Start by reading AGENT.md, then implement the assigned work. Write tests. Commit changes.
-                    """
+                Start by reading AGENT.md, then:
+                1. Understand the codebase structure
+                2. Implement your assigned task
+                3. Write tests
+                4. Commit with prefix [slot-\(slot.slotIndex + 1)]
+
+                Begin now.
+                """
                 try? await Task.sleep(for: .milliseconds(800)) // Wait for CLI to initialize
                 try? await runner.sendInput(id: processId, text: adapter.formatCommand(prompt))
 
