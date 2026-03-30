@@ -184,9 +184,17 @@ final class CockpitViewModel {
                 startOrgChartRefresh()
                 startHeartbeatPolling()
                 startBudgetPolling()
+
+                // Auto-launch any slots that are still empty (not yet running)
+                let emptySlots = slots.filter { $0.status == .empty }
+                if !emptySlots.isEmpty {
+                    logger.info("Found \(emptySlots.count) empty slots — auto-launching")
+                    await autoLaunchAssignedSlots(emptySlots, projectPath: projectPath)
+                }
+
                 isLoading = false
                 let slotCount = self.slots.count
-                logger.info("Recovered stale session with \(slotCount) slots")
+                logger.info("Recovered session with \(slotCount) slots")
                 return
             }
 
