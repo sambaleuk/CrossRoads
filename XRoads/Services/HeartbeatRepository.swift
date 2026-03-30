@@ -116,6 +116,26 @@ actor HeartbeatRepository {
         }
     }
 
+    /// Fetch all scheduled runs (enabled and disabled), ordered by creation time.
+    func fetchAllScheduledRuns() throws -> [ScheduledRun] {
+        try dbQueue.read { db in
+            try ScheduledRun
+                .order(ScheduledRun.Columns.createdAt.desc)
+                .fetchAll(db)
+        }
+    }
+
+    /// Toggle the enabled state of a scheduled run.
+    func toggleScheduledRun(id: UUID, enabled: Bool) throws {
+        try dbQueue.write { db in
+            guard var run = try ScheduledRun.fetchOne(db, key: id) else {
+                throw HeartbeatRepositoryError.scheduledRunNotFound(id)
+            }
+            run.enabled = enabled
+            try run.update(db)
+        }
+    }
+
     /// Update run result and optionally set next run time.
     func updateRunResult(id: UUID, result: String, nextRunAt: Date?) throws {
         try dbQueue.write { db in

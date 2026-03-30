@@ -39,6 +39,15 @@ struct MainWindowView: View {
     /// Controls the PRD assistant sheet
     @State private var showPRDAssistantSheet: Bool = false
 
+    /// Controls the Skills Browser sheet
+    @State private var showSkillsBrowserSheet: Bool = false
+
+    /// Controls the Art Direction sheet
+    @State private var showArtDirectionSheet: Bool = false
+
+    /// Controls the Intelligence sheet (Phase 6)
+    @State private var showIntelligenceSheet: Bool = false
+
     /// Controls the orchestrator chat panel visibility (US-V4-015)
     @AppStorage(UserDefaults.Keys.chatPanelExpanded) private var showChatPanel: Bool = true
 
@@ -80,6 +89,18 @@ struct MainWindowView: View {
                 handleAction: { appState.handleHealthAction($0) },
                 dialogTitle: healthDialogTitle
             ))
+            .sheet(isPresented: $showSkillsBrowserSheet) {
+                SkillsBrowserView()
+                    .frame(minWidth: 600, minHeight: 500)
+            }
+            .sheet(isPresented: $showArtDirectionSheet) {
+                ArtDirectionView()
+                    .frame(minWidth: 800, minHeight: 600)
+            }
+            .sheet(isPresented: $showIntelligenceSheet) {
+                IntelligenceSheetView()
+                    .frame(minWidth: 700, minHeight: 500)
+            }
     }
 
     // MARK: - Main Content
@@ -244,6 +265,21 @@ struct MainWindowView: View {
             Label("History", systemImage: "clock.arrow.circlepath")
         }
         .help("View past orchestrations")
+
+        Button { showIntelligenceSheet = true } label: {
+            Label("Intelligence", systemImage: "brain.head.profile")
+        }
+        .help("Learning analytics, trust scores, memory, conflicts")
+
+        Button { showSkillsBrowserSheet = true } label: {
+            Label("Skills", systemImage: "puzzlepiece.extension")
+        }
+        .help("Browse available skills")
+
+        Button { showArtDirectionSheet = true } label: {
+            Label("Art Direction", systemImage: "paintpalette")
+        }
+        .help("Open Art Direction pipeline")
 
         SettingsLink {
             Label("Settings", systemImage: "gearshape")

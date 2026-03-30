@@ -58,6 +58,9 @@ final class CockpitViewModel {
     /// Phase 5: Per-slot heartbeat pulse results, keyed by slot ID
     var heartbeatResults: [UUID: PulseResult] = [:]
 
+    /// Phase 5: Model routing recommendation from BudgetService
+    var modelRecommendation: BudgetService.ModelRecommendation?
+
     /// Cockpit Brain: Current orchestration plan
     var cockpitPlan: CockpitOrchestrationPlan?
 

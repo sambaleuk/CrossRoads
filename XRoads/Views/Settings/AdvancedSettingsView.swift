@@ -142,9 +142,8 @@ public struct AdvancedSettingsView: View {
                 .foregroundStyle(Color.textPrimary)
 
             if scheduledRunsEnabled {
-                Text("Configure schedules in the Cockpit → Schedule tab")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Color.textTertiary)
+                ScheduleManagerView()
+                    .frame(minHeight: 200)
             }
         } header: {
             Label("Autonomous Scheduling", systemImage: "calendar.badge.clock")
@@ -163,9 +162,8 @@ public struct AdvancedSettingsView: View {
                 .foregroundStyle(Color.textPrimary)
 
             if autoSnapshot {
-                Text("Every config change creates an immutable snapshot for rollback")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Color.textTertiary)
+                ConfigHistoryView()
+                    .frame(minHeight: 200)
             }
         } header: {
             Label("Config Versioning", systemImage: "clock.arrow.circlepath")

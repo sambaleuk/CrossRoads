@@ -57,6 +57,12 @@ struct CockpitModeView: View {
                                 BudgetPanelView(budgetStatus: viewModel.budgetStatus)
                             }
 
+                            // Phase 5: Model Routing panel
+                            if viewModel.modelRecommendation != nil || viewModel.session != nil {
+                                Divider()
+                                ModelRoutingView(recommendation: viewModel.modelRecommendation)
+                            }
+
                             // Phase 5: Heartbeat panel (shown when results exist)
                             if !viewModel.heartbeatResults.isEmpty {
                                 Divider()
