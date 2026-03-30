@@ -167,6 +167,32 @@ final class CockpitViewModel {
         errorMessage = nil
 
         do {
+            // Step 0: Try to load an existing active session (e.g. from a previous crash).
+            // If one exists, reuse it instead of creating a new one.
+            if let existing = try await repository.activeSession(for: projectPath) {
+                logger.info("Found existing session \(existing.id) — recovering")
+                session = existing
+                slots = try await repository.fetchSlots(sessionId: existing.id)
+                revealedSlotIds = Set(slots.map(\.id))
+                buildChatViewModels(for: slots)
+                startChairmanBriefRefresh()
+                startGatePolling()
+                startCostPolling()
+                startOrgChartRefresh()
+                startHeartbeatPolling()
+                startBudgetPolling()
+                isLoading = false
+                let slotCount = self.slots.count
+                logger.info("Recovered stale session with \(slotCount) slots")
+                return
+            }
+
+            // Step 0b: Clean up any leftover stale sessions (closed/orphaned) to avoid UNIQUE constraint errors
+            let cleaned = try await repository.cleanupStaleSessions(projectPath: projectPath)
+            if cleaned > 0 {
+                logger.info("Cleaned up \(cleaned) stale session(s) for \(projectPath)")
+            }
+
             // Step 1: Create session in idle state
             let newSession = try await repository.createSession(
                 CockpitSession(projectPath: projectPath)

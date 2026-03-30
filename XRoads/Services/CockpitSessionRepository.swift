@@ -106,6 +106,29 @@ actor CockpitSessionRepository {
         }
     }
 
+    // MARK: - Stale Session Cleanup
+
+    /// Close any non-closed sessions for a project path (cleanup after crash/force-quit).
+    /// Returns the number of sessions that were closed.
+    @discardableResult
+    func cleanupStaleSessions(projectPath: String) throws -> Int {
+        try dbQueue.write { db in
+            let count = try CockpitSession
+                .filter(CockpitSession.Columns.projectPath == projectPath)
+                .filter(CockpitSession.Columns.status != CockpitSessionStatus.closed.rawValue)
+                .fetchCount(db)
+
+            if count > 0 {
+                try db.execute(
+                    sql: "UPDATE cockpit_session SET status = ?, updatedAt = ? WHERE projectPath = ? AND status != 'closed'",
+                    arguments: [CockpitSessionStatus.closed.rawValue, Date(), projectPath]
+                )
+            }
+
+            return count
+        }
+    }
+
     // MARK: - AgentSlot CRUD
 
     /// Create a slot for a session
