@@ -545,6 +545,12 @@ actor CockpitDatabaseManager {
             )
         }
 
+        migrator.registerMigration("v16_agent_slot_claude_session_id") { db in
+            try db.alter(table: "agent_slot") { t in
+                t.add(column: "claudeSessionId", .text)
+            }
+        }
+
         return migrator
     }
 

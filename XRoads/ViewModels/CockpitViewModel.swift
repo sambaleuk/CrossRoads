@@ -111,6 +111,9 @@ final class CockpitViewModel {
     private let agentMemoryRepo: AgentMemoryRepository?
     private let logger = Logger(subsystem: "com.xroads", category: "CockpitVM")
 
+    /// PRD-S08: Claude Code native orchestrator (lazy-initialized from ptyProcessRunner)
+    private var orchestrator: ClaudeCodeOrchestrator?
+
     /// Task for chairman brief polling
     private var chairmanBriefTask: Task<Void, Never>?
     /// Task for pending gate polling (US-003)
@@ -779,34 +782,45 @@ final class CockpitViewModel {
 
     // MARK: - Auto-Launch: Cockpit → Dashboard → Agent
 
-    /// After chairman assigns slots, auto-configure and launch agents.
-    /// Bridges cockpit assignments to dashboard terminal slots.
+    /// After chairman assigns slots, auto-configure and launch agents using
+    /// Claude Code native orchestration (PRD-S08).
+    ///
+    /// For each assigned slot:
+    /// 1. Generate .claude/agents/ subagent definition
+    /// 2. Generate project context (CLAUDE.md + rules) — once for first slot
+    /// 3. Generate hooks config (settings.local.json) — once for first slot
+    /// 4. Create git worktree (prune + create)
+    /// 5. Launch via claude headless mode (stream-json)
+    /// 6. Post notifications for dashboard sync
     private func autoLaunchAssignedSlots(_ assignedSlots: [AgentSlot], projectPath: String) async {
         guard let runner = ptyProcessRunner else {
             logger.warning("No PTY runner available — slots created but not auto-launched")
             return
         }
 
-        print("🚀 [COCKPIT BRAIN] Auto-launching \(assignedSlots.count) agents...")
-        logger.info("Auto-launching \(assignedSlots.count) agents from cockpit assignments...")
+        // Initialize orchestrator if needed
+        if orchestrator == nil {
+            orchestrator = ClaudeCodeOrchestrator(ptyRunner: runner)
+        }
+
+        guard let orchestrator else { return }
+
+        logger.info("Auto-launching \(assignedSlots.count) agents via Claude Code native orchestration...")
+
+        // One-time setup: generate project context and hooks config (first slot only)
+        let chairmanBrief = session?.chairmanBrief ?? ""
+        var projectContextGenerated = false
 
         for slot in assignedSlots {
             do {
-                print("🔧 [SLOT \(slot.slotIndex)] agentType='\(slot.agentType)' branch='\(slot.branchName ?? "nil")' status=\(slot.status)")
-
-                // Find the correct CLI adapter for this agent type
+                // Validate agent type
                 guard let agentType = AgentType(rawValue: slot.agentType) else {
-                    print("❌ [SLOT \(slot.slotIndex)] Unknown agent type: '\(slot.agentType)'")
                     logger.warning("Unknown agent type: \(slot.agentType) for slot \(slot.slotIndex)")
                     continue
                 }
 
                 let adapter = agentType.adapter()
-                print("🔍 [SLOT \(slot.slotIndex)] adapter.executablePath = \(adapter.executablePath)")
-                print("🔍 [SLOT \(slot.slotIndex)] adapter.isAvailable() = \(adapter.isAvailable())")
-
                 guard adapter.isAvailable() else {
-                    print("❌ [SLOT \(slot.slotIndex)] CLI not available at: \(adapter.executablePath)")
                     logger.warning("\(agentType.rawValue) CLI not available — skipping slot \(slot.slotIndex)")
                     var errorSlot = slot
                     errorSlot.status = .error
@@ -814,14 +828,13 @@ final class CockpitViewModel {
                     continue
                 }
 
-                // Create worktree for this slot
+                // --- Step 1: Git worktree setup (keep existing prune + create logic) ---
                 let repoURL = URL(fileURLWithPath: projectPath)
                 let branchName = slot.branchName ?? "xroads/slot-\(slot.slotIndex)"
                 let worktreePath = repoURL
                     .deletingLastPathComponent()
                     .appendingPathComponent("\(repoURL.lastPathComponent)-\(branchName.replacingOccurrences(of: "/", with: "-"))")
 
-                // Prune stale worktrees + delete branch if exists, then create fresh
                 let gitService = GitService()
                 let _ = try? await gitService.pruneWorktrees(repoPath: projectPath)
                 let _ = try? await gitService.deleteBranch(name: branchName, repoPath: projectPath, force: true)
@@ -834,7 +847,6 @@ final class CockpitViewModel {
                     )
                     logger.info("Worktree created: \(worktreePath.path)")
                 } catch {
-                    // If worktree dir already exists, reuse it
                     if FileManager.default.fileExists(atPath: worktreePath.path) {
                         logger.info("Reusing existing worktree: \(worktreePath.path)")
                     } else {
@@ -843,122 +855,128 @@ final class CockpitViewModel {
                     }
                 }
 
-                // Update slot to provisioning
+                // Update slot to provisioning with worktree path
                 var provisioningSlot = slot
                 provisioningSlot.status = .provisioning
                 provisioningSlot.worktreePath = worktreePath.path
                 let _ = try? await repository.updateSlot(provisioningSlot)
 
-                // Build rich AGENT.md with chairman context
-                let chairmanBrief = session?.chairmanBrief ?? ""
-                let taskDesc = slot.currentTask ?? "Implement assigned stories"
-                let skillName = slot.skillId != nil ? "specialized" : "general"
-                let projectName = repoURL.lastPathComponent
-
-                let agentMdContent = """
-                # Agent Brief — Slot \(slot.slotIndex + 1) [\(agentType.displayName)]
-
-                ## Mission
-                \(taskDesc)
-
-                ## Project Context
-                - **Project**: \(projectName)
-                - **Branch**: `\(branchName)`
-                - **Agent**: \(agentType.displayName)
-                - **Worktree**: `\(worktreePath.path)`
-                - **Main Repo**: `\(projectPath)`
-
-                ## Chairman Brief
-                \(chairmanBrief)
-
-                ## Your Role
-                You are Slot \(slot.slotIndex + 1) in a multi-agent orchestration. Other agents are working in parallel on different branches. DO NOT touch files outside your assigned scope.
-
-                ## Working Rules
-                1. **Stay in your worktree** — all work happens at `\(worktreePath.path)`
-                2. **Read the codebase first** — understand the project structure before writing code
-                3. **Implement your assigned task**: \(taskDesc)
-                4. **Write tests** for every feature you implement
-                5. **Run tests** and ensure they pass before committing
-                6. **Commit with clear messages** — prefix with your slot: `[slot-\(slot.slotIndex + 1)] description`
-                7. **DO NOT** run destructive commands (rm -rf, git push --force, DROP TABLE)
-                8. **DO NOT** modify files that other agents are likely working on
-                9. **Update progress** — write learnings to `progress.txt`
-
-                ## Coordination
-                - Other agents are working on parallel branches
-                - Your branch: `\(branchName)`
-                - Merge coordination is handled by the orchestrator — just commit to your branch
-                - If you encounter a blocker, write it to `progress.txt`
-
-                ## Start Now
-                Begin by reading the project structure, then implement your assigned task with tests.
-                """
-
-                // Write AGENT.md to worktree
-                let agentMdPath = worktreePath.appendingPathComponent("AGENT.md")
-                try? agentMdContent.write(to: agentMdPath, atomically: true, encoding: .utf8)
-
-                // Launch agent via PTY
-                let slotIndex = slot.slotIndex
-                // Route PTY output to dashboard TerminalSlot via notification
-                let slotNumber = slotIndex + 1 // dashboard is 1-based
-                let processId = try await runner.launch(
-                    executable: adapter.executablePath,
-                    arguments: adapter.launchArguments(worktreePath: worktreePath.path),
-                    workingDirectory: worktreePath.path,
-                    environment: [
-                        "CROSSROADS_SESSION_ID": self.session?.id.uuidString ?? "",
-                        "CROSSROADS_SLOT": String(slotIndex),
-                        "CROSSROADS_AGENT": agentType.rawValue,
-                        "CROSSROADS_BRANCH": branchName,
-                    ],
-                    onOutput: { output in
-                        // Route output to dashboard slot terminal
-                        Task { @MainActor in
-                            NotificationCenter.default.post(
-                                name: .cockpitSlotOutput,
-                                object: nil,
-                                userInfo: [
-                                    "slotNumber": slotNumber,
-                                    "output": output,
-                                    "agentType": agentType.rawValue,
-                                ]
-                            )
-                        }
-                    },
-                    onTermination: { (exitCode: Int32) in
-                        Task { @MainActor in
-                            NotificationCenter.default.post(
-                                name: .cockpitSlotTerminated,
-                                object: nil,
-                                userInfo: [
-                                    "slotNumber": slotNumber,
-                                    "exitCode": exitCode,
-                                ]
-                            )
-                        }
+                // --- Step 2: One-time project context + hooks generation ---
+                if !projectContextGenerated {
+                    do {
+                        try await orchestrator.generateProjectContext(
+                            projectPath: projectPath,
+                            cop: cockpitPlan,
+                            chairmanBrief: chairmanBrief
+                        )
+                        try await orchestrator.generateHooksConfig(projectPath: projectPath)
+                        projectContextGenerated = true
+                        logger.info("Project context and hooks generated for orchestration session")
+                    } catch {
+                        logger.error("Failed to generate project context: \(error.localizedDescription)")
+                        // Non-fatal: continue with launch even without context files
                     }
+                }
+
+                // --- Step 3: Generate subagent definition ---
+                var slotWithWorktree = provisioningSlot
+                slotWithWorktree.worktreePath = worktreePath.path
+                slotWithWorktree.branchName = branchName
+
+                let agentDefPath = try await orchestrator.generateAgentDefinition(
+                    slot: slotWithWorktree,
+                    chairmanBrief: chairmanBrief,
+                    projectPath: projectPath
                 )
+                logger.info("Agent definition generated: \(agentDefPath)")
 
-                // Send the task prompt to the agent via stdin
+                // --- Step 4: Inject initial memories (best-effort) ---
+                do {
+                    // No profiles available yet in most cases — that's fine
+                    try await orchestrator.injectInitialMemories(
+                        slotIndex: slot.slotIndex,
+                        agentType: slot.agentType,
+                        projectPath: projectPath,
+                        profiles: []
+                    )
+                } catch {
+                    logger.debug("Memory injection skipped: \(error.localizedDescription)")
+                }
+
+                // --- Step 5: Launch via Claude Code headless mode ---
+                let slotIndex = slot.slotIndex
+                let slotNumber = slotIndex + 1
+                let taskDesc = slot.currentTask ?? "Implement assigned stories"
+                let projectName = repoURL.lastPathComponent
+                let agentName = URL(fileURLWithPath: agentDefPath)
+                    .deletingPathExtension().lastPathComponent
+
                 let prompt = """
-                Read the AGENT.md file in this directory for your full mission brief and instructions.
-
-                You are Slot \(slot.slotIndex + 1) (\(agentType.displayName)) working on project \(projectName).
+                You are Slot \(slotNumber) (\(agentType.displayName)) working on project \(projectName).
                 Your task: \(taskDesc)
                 Your branch: \(branchName)
 
-                Start by reading AGENT.md, then:
+                Read your agent definition and the project CLAUDE.md for full context.
+                Then:
                 1. Understand the codebase structure
                 2. Implement your assigned task
                 3. Write tests
-                4. Commit with prefix [slot-\(slot.slotIndex + 1)]
+                4. Commit with prefix [slot-\(slotNumber)]
 
                 Begin now.
                 """
-                try? await Task.sleep(for: .milliseconds(800)) // Wait for CLI to initialize
-                try? await runner.sendInput(id: processId, text: adapter.formatCommand(prompt))
+
+                let sessionIdForSlot = slot.claudeSessionId
+                let slotId = slot.id
+                let agentTypeRaw = agentType.rawValue
+
+                let headlessSession = try await orchestrator.launchHeadless(
+                    slotIndex: slotIndex,
+                    agentName: agentName,
+                    prompt: prompt,
+                    worktreePath: worktreePath.path,
+                    projectPath: projectPath,
+                    sessionId: sessionIdForSlot,
+                    environment: [
+                        "CROSSROADS_SESSION_ID": self.session?.id.uuidString ?? "",
+                        "CROSSROADS_SLOT": String(slotIndex),
+                        "CROSSROADS_AGENT": agentTypeRaw,
+                        "CROSSROADS_BRANCH": branchName,
+                    ],
+                    onOutput: { output in
+                        NotificationCenter.default.post(
+                            name: .cockpitSlotOutput,
+                            object: nil,
+                            userInfo: [
+                                "slotNumber": slotNumber,
+                                "output": output,
+                                "agentType": agentTypeRaw,
+                            ]
+                        )
+                    },
+                    onTermination: { exitCode in
+                        NotificationCenter.default.post(
+                            name: .cockpitSlotTerminated,
+                            object: nil,
+                            userInfo: [
+                                "slotNumber": slotNumber,
+                                "exitCode": exitCode,
+                            ]
+                        )
+                    },
+                    onSessionId: { [weak self] capturedSessionId in
+                        // Store session_id for resume support (US-007)
+                        guard let self else { return }
+                        Task { @MainActor in
+                            if let idx = self.slots.firstIndex(where: { $0.id == slotId }) {
+                                self.slots[idx].claudeSessionId = capturedSessionId
+                            }
+                            var updatedSlot = slot
+                            updatedSlot.claudeSessionId = capturedSessionId
+                            let _ = try? await self.repository.updateSlot(updatedSlot)
+                        }
+                    }
+                )
 
                 // Update slot to running
                 var runningSlot = provisioningSlot
@@ -971,8 +989,8 @@ final class CockpitViewModel {
                     slots[idx].worktreePath = worktreePath.path
                 }
 
-                slotProcessIds[slot.id] = processId
-                logger.info("✅ Slot \(slot.slotIndex) auto-launched: \(agentType.rawValue) on \(branchName)")
+                slotProcessIds[slot.id] = headlessSession.processId
+                logger.info("Slot \(slot.slotIndex) launched via headless mode: \(agentTypeRaw) on \(branchName)")
 
                 // Notify dashboard to sync its TerminalSlot
                 NotificationCenter.default.post(
@@ -980,14 +998,14 @@ final class CockpitViewModel {
                     object: nil,
                     userInfo: [
                         "slotIndex": slot.slotIndex,
-                        "agentType": agentType.rawValue,
+                        "agentType": agentTypeRaw,
                         "branchName": branchName,
-                        "processId": processId,
+                        "processId": headlessSession.processId,
                         "worktreePath": worktreePath.path,
                     ]
                 )
 
-                // Small delay between launches
+                // Small delay between launches to avoid resource contention
                 try? await Task.sleep(for: .milliseconds(300))
 
             } catch {

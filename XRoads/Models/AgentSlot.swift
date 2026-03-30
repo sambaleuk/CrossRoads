@@ -28,6 +28,8 @@ struct AgentSlot: Codable, Identifiable, Hashable, Sendable {
     var branchName: String?
     var skillId: UUID?
     var currentTask: String?
+    /// Claude Code headless session ID for resume support (PRD-S08)
+    var claudeSessionId: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -41,6 +43,7 @@ struct AgentSlot: Codable, Identifiable, Hashable, Sendable {
         branchName: String? = nil,
         skillId: UUID? = nil,
         currentTask: String? = nil,
+        claudeSessionId: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -53,6 +56,7 @@ struct AgentSlot: Codable, Identifiable, Hashable, Sendable {
         self.branchName = branchName
         self.skillId = skillId
         self.currentTask = currentTask
+        self.claudeSessionId = claudeSessionId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -81,7 +85,7 @@ extension AgentSlot: FetchableRecord, PersistableRecord {
 
     enum Columns: String, ColumnExpression {
         case id, cockpitSessionId, slotIndex, status, agentType
-        case worktreePath, branchName, skillId, currentTask, createdAt, updatedAt
+        case worktreePath, branchName, skillId, currentTask, claudeSessionId, createdAt, updatedAt
     }
 }
 
