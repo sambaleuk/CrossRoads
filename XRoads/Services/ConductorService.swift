@@ -95,7 +95,7 @@ actor ConductorService {
             // Resolve or create the MetierSkill for this assignment
             let skillId = try await resolveSkill(named: assignment.skillName)
 
-            let slot = AgentSlot(
+            var slot = AgentSlot(
                 cockpitSessionId: sessionId,
                 slotIndex: assignment.slotIndex,
                 status: .empty,
@@ -103,11 +103,15 @@ actor ConductorService {
                 branchName: assignment.branch,
                 skillId: skillId
             )
+            slot.currentTask = assignment.taskDescription
 
-            let created = try await repository.createSlot(slot)
+            var created = try await repository.createSlot(slot)
+            // Persist the task description
+            created.currentTask = assignment.taskDescription
+            let _ = try? await repository.updateSlot(created)
             createdSlots.append(created)
 
-            logger.info("Created slot \(assignment.slotIndex): \(assignment.skillName) (\(assignment.agentType))")
+            logger.info("Created slot \(assignment.slotIndex): \(assignment.skillName) (\(assignment.agentType)) — \(assignment.taskDescription)")
         }
 
         // Step 4: Transition session to active via lifecycle manager
