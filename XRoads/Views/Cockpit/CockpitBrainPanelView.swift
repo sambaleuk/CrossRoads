@@ -57,22 +57,19 @@ struct CockpitBrainPanelView: View {
 
             Divider()
 
-            // Content: live stream or static fallback
+            // Content: live stream or static fallback — always fills available space
             if isAlive || !entries.isEmpty {
                 liveStreamView
+                    .frame(maxHeight: .infinity)
             } else if let cop = cop {
                 staticCOPView(cop)
                     .padding(Theme.Spacing.sm)
+                    .frame(maxHeight: .infinity)
             } else {
                 emptyStateView
             }
         }
         .background(Color.bgCanvas)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.Radius.md)
-                .stroke(Color.borderMuted.opacity(0.4), lineWidth: 1)
-        )
         .onReceive(NotificationCenter.default.publisher(for: .cockpitBrainOutput)) { notification in
             handleBrainOutput(notification)
         }
@@ -404,15 +401,20 @@ struct CockpitBrainPanelView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: Theme.Spacing.xs) {
+        VStack(spacing: Theme.Spacing.sm) {
             Spacer()
-            Text("No orchestration plan")
-                .font(.system(size: 10))
+            Image(systemName: "brain.head.profile")
+                .font(.system(size: 24))
+                .foregroundStyle(Color.textTertiary.opacity(0.5))
+            Text("Brain waiting...")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.textTertiary)
+            Text("Open a project to activate the cockpit brain")
+                .font(.system(size: 9))
+                .foregroundStyle(Color.textTertiary.opacity(0.6))
             Spacer()
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Event Handling
