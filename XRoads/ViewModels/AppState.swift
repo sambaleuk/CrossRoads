@@ -1938,6 +1938,16 @@ final class AppState {
         let repoURL = URL(fileURLWithPath: path)
         let recovery = await services.orchestrationRecovery.checkForRecovery(repoPath: repoURL)
         await MainActor.run { self.orchestration.recoveredOrchestration = recovery }
+
+        // Auto-activate cockpit brain on project switch
+        // Close previous session if exists, then bootstrap fresh
+        if let vm = cockpitViewModel {
+            await vm.close()
+            cockpitViewModel = nil
+        }
+        if isGitRepository {
+            bootstrapCockpit()
+        }
     }
 
     /// Dismiss the recovery banner without resuming.
