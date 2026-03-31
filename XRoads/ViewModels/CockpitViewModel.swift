@@ -50,7 +50,7 @@ final class CockpitViewModel {
     var sessionCost: UsageSummary = .zero
 
     /// Phase 5: Org chart roles for the active session
-    var orgRoles: [OrgRole] = []
+    // orgRoles removed — supplanted by Suite roles
 
     /// Phase 5: Session-level budget status snapshot
     var budgetStatus: BudgetStatus?
@@ -96,7 +96,7 @@ final class CockpitViewModel {
     /// Cost tracking repository
     let costRepo: CostEventRepository?
     /// Phase 5: Org chart service (optional for backward compat)
-    private let orgChartService: OrgChartService?
+    // orgChartService removed — supplanted by Suite roles
     /// Phase 5: Budget service (optional for backward compat)
     private let budgetService: BudgetService?
     /// Phase 5: Heartbeat service (optional for backward compat)
@@ -131,8 +131,7 @@ final class CockpitViewModel {
     private var gatePollTask: Task<Void, Never>?
     /// Task for cost summary polling
     private var costPollTask: Task<Void, Never>?
-    /// Phase 5: Task for org chart refresh
-    private var orgChartTask: Task<Void, Never>?
+    // orgChartTask removed — supplanted by Suite roles
     /// Phase 5: Task for heartbeat polling
     private var heartbeatTask: Task<Void, Never>?
     /// Phase 5: Task for budget polling
@@ -149,7 +148,7 @@ final class CockpitViewModel {
         ptyProcessRunner: PTYProcessRunner? = nil,
         gateRepo: ExecutionGateRepository? = nil,
         costRepo: CostEventRepository? = nil,
-        orgChartService: OrgChartService? = nil,
+        orgChartService: Any? = nil,  // deprecated — supplanted by Suite roles
         budgetService: BudgetService? = nil,
         heartbeatService: HeartbeatService? = nil,
         learningEngine: LearningEngine? = nil,
@@ -168,7 +167,7 @@ final class CockpitViewModel {
         self.ptyProcessRunner = ptyProcessRunner
         self.gateRepo = gateRepo
         self.costRepo = costRepo
-        self.orgChartService = orgChartService
+        // orgChartService removed
         self.budgetService = budgetService
         self.heartbeatService = heartbeatService
         self.learningEngine = learningEngine
@@ -201,7 +200,7 @@ final class CockpitViewModel {
                 startChairmanBriefRefresh()
                 startGatePolling()
                 startCostPolling()
-                startOrgChartRefresh()
+                // orgChartRefresh removed — supplanted by Suite roles
                 startHeartbeatPolling()
                 startBudgetPolling()
 
@@ -261,7 +260,6 @@ final class CockpitViewModel {
             startCostPolling()
 
             // Step 9: Start Phase 5 polling loops
-            startOrgChartRefresh()
             startHeartbeatPolling()
             startBudgetPolling()
 
@@ -397,8 +395,7 @@ final class CockpitViewModel {
             gatePollTask = nil
             costPollTask?.cancel()
             costPollTask = nil
-            orgChartTask?.cancel()
-            orgChartTask = nil
+            // orgChartTask removed
             heartbeatTask?.cancel()
             heartbeatTask = nil
             budgetTask?.cancel()
@@ -407,7 +404,7 @@ final class CockpitViewModel {
             slotProcessIds = [:]
             slotCosts = [:]
             sessionCost = .zero
-            orgRoles = []
+            // orgRoles removed
             budgetStatus = nil
             heartbeatResults = [:]
 
@@ -813,7 +810,7 @@ final class CockpitViewModel {
                 // Start cost polling
                 startCostPolling()
                 // Start Phase 5 polling loops
-                startOrgChartRefresh()
+                // orgChartRefresh removed — supplanted by Suite roles
                 startHeartbeatPolling()
                 startBudgetPolling()
             }
@@ -919,54 +916,7 @@ final class CockpitViewModel {
 
     // MARK: - Phase 5: Org Chart Refresh
 
-    /// Polls org roles for the active session every 10 seconds.
-    private func startOrgChartRefresh() {
-        orgChartTask?.cancel()
-        orgChartTask = Task { [weak self] in
-            while !Task.isCancelled {
-                await self?.refreshOrgRoles()
-                try? await Task.sleep(for: .seconds(10))
-            }
-        }
-    }
-
-    /// Refreshes org role list from the OrgChartService.
-    private func refreshOrgRoles() async {
-        guard let orgChartService, let sessionId = session?.id else { return }
-        do {
-            let roles = try await orgChartService.getTree(sessionId: sessionId)
-            let newRoles = flattenTree(roles)
-            // WIRING 7: Snapshot org chart config when roles change
-            if newRoles.count != orgRoles.count, let configSnapshotRepo = configSnapshotRepo {
-                Task {
-                    let rolesData = newRoles.map { "\($0.name):\($0.roleType)" }.joined(separator: ",")
-                    let snapshot = ConfigSnapshot(
-                        sessionId: sessionId,
-                        configType: "org_chart",
-                        version: 0, // auto-calculated by repository
-                        data: rolesData,
-                        changedBy: "system",
-                        changeReason: "Org chart updated (\(newRoles.count) roles)"
-                    )
-                    try? await configSnapshotRepo.createSnapshot(snapshot)
-                }
-            }
-            // Flatten tree into a list for the panel
-            orgRoles = newRoles
-        } catch {
-            // Non-fatal: org chart refresh failure
-        }
-    }
-
-    /// Flattens OrgRoleNode trees into a flat [OrgRole] array (pre-order).
-    private func flattenTree(_ nodes: [OrgRoleNode]) -> [OrgRole] {
-        var result: [OrgRole] = []
-        for node in nodes {
-            result.append(node.role)
-            result.append(contentsOf: flattenTree(node.children))
-        }
-        return result
-    }
+    // Org chart removed — supplanted by Suite roles system
 
     // MARK: - Phase 5: Heartbeat Polling
 

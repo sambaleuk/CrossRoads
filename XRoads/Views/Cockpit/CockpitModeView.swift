@@ -60,11 +60,7 @@ struct CockpitModeView: View {
                                     )
                                 }
 
-                                // Phase 5: Org Chart panel (shown when roles exist)
-                                if !viewModel.orgRoles.isEmpty {
-                                    Divider()
-                                    OrgChartPanelView(orgRoles: viewModel.orgRoles)
-                                }
+                                // Org chart removed — supplanted by Suite roles
                             }
                             .padding(Theme.Spacing.sm)
                         }
