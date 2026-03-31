@@ -499,6 +499,15 @@ final class CockpitViewModel {
             // Notify observers
             NotificationCenter.default.post(name: .cockpitBrainStarted, object: nil)
             logger.info("Cockpit brain started successfully")
+
+            // Announce to chat
+            let slotCount = slots.count
+            let suiteName = session?.suite.name ?? "Developer"
+            NotificationCenter.default.post(
+                name: .cockpitBrainToChat,
+                object: nil,
+                userInfo: ["content": "Cockpit brain online. Suite: \(suiteName). Monitoring \(slotCount) slots. I'll keep you posted."]
+            )
         } catch {
             // Non-fatal: cockpit works without brain session
             logger.error("Cockpit brain launch failed: \(error.localizedDescription)")

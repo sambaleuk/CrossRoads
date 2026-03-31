@@ -117,6 +117,29 @@ struct OrchestratorChatView: View {
                 await viewModel.loadContext(from: appState)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cockpitBrainToChat)) { notification in
+            guard let info = notification.userInfo,
+                  let content = info["content"] as? String
+            else { return }
+
+            let message = ChatMessage(
+                role: .system,
+                content: "🧠 **Cockpit Brain**: \(content)",
+                status: .complete
+            )
+            viewModel.messages.append(message)
+
+            // Also persist to chat history
+            if let repo = viewModel.chatHistoryRepo {
+                let entry = ChatHistoryEntry(
+                    sessionId: viewModel.cockpitSessionId,
+                    role: "system",
+                    content: content,
+                    mode: "brain"
+                )
+                Task { try? await repo.saveMessage(entry) }
+            }
+        }
         .sheet(isPresented: $showPRDFullView) {
             if let prd = selectedPRDForView {
                 PRDPreviewSheet(prd: prd)

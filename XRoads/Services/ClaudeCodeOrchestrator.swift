@@ -765,6 +765,17 @@ actor ClaudeCodeOrchestrator {
                 guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
+                // Check for chat message: [CHAT] message → posts to chat panel
+                if trimmed.hasPrefix("[CHAT]") {
+                    let msg = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                    NotificationCenter.default.post(
+                        name: .cockpitBrainToChat,
+                        object: nil,
+                        userInfo: ["content": msg, "role": "system"]
+                    )
+                    return (type: "decision", content: "→ Chat: \(msg)")
+                }
+
                 // Check for suite switch command: [SUITE:marketer]
                 if trimmed.hasPrefix("[SUITE:") && trimmed.contains("]") {
                     let suiteId = String(trimmed.dropFirst(7).prefix(while: { $0 != "]" }))

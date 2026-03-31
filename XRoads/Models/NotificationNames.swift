@@ -77,4 +77,8 @@ extension Notification.Name {
     /// UserInfo: "type" (String: thinking/action/decision/loop/subagent/error),
     ///           "content" (String), "timestamp" (Date)
     static let cockpitBrainOutput = Notification.Name("cockpitBrainOutput")
+
+    /// Posted when the cockpit brain wants to send a message to the chat panel.
+    /// UserInfo: "content" (String), "role" (String: "system" or "assistant")
+    static let cockpitBrainToChat = Notification.Name("cockpitBrainToChat")
 }

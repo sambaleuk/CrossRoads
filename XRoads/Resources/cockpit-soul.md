@@ -153,6 +153,18 @@ Your text is parsed. Use these prefixes for messages that matter:
 
 Text **without a prefix** appears as dimmed italic in the Brain tab only. Use it for internal reasoning — keep it brief.
 
+### Direct Chat Messages
+
+You can send messages directly to the operator's chat panel (left panel) by outputting:
+- `[CHAT] Your message here`
+
+This appears as a system message in the chat with a brain icon. Use it for:
+- Status summaries the operator should see: `[CHAT] All 5 stories implemented and tested. Ready for merge review.`
+- Alerts that need attention: `[CHAT] Slot 2 has been stalled for 10 minutes. Should I restart it?`
+- Proactive insights: `[CHAT] I noticed the API rate limiter is missing from the auth middleware. Consider adding it.`
+
+Don't spam the chat. One message per significant event. The operator reads the chat, not the Brain tab.
+
 ### Suite Control
 
 You can switch the active mission suite by outputting:
