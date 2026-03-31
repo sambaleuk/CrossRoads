@@ -19,54 +19,39 @@ struct CockpitModeView: View {
 
             Divider()
 
-            // Main content: slots + chairman feed
-            if viewModel.slots.isEmpty && !viewModel.isLoading {
-                emptyState
-            } else {
-                HStack(alignment: .top, spacing: 0) {
-                    // Slot cards (main area)
-                    slotsList
-                        .frame(maxWidth: .infinity)
+            // Main content: Brain (always visible) is the cockpit
+            VStack(spacing: 0) {
+                // Brain panel — the consciousness stream, takes all available space
+                CockpitBrainPanelView(
+                    cop: viewModel.cockpitPlan,
+                    adaptationActions: viewModel.adaptationActions
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                // Compact panels below
+                if viewModel.chairmanBrief != nil || viewModel.budgetStatus != nil || !viewModel.heartbeatResults.isEmpty {
                     Divider()
 
-                    // Right sidebar: Brain (maximized) + compact panels
-                    VStack(spacing: 0) {
-                        // Brain panel gets maximum space — the consciousness stream
-                        CockpitBrainPanelView(
-                            cop: viewModel.cockpitPlan,
-                            adaptationActions: viewModel.adaptationActions
-                        )
-                        .frame(maxHeight: .infinity)
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
 
-                        // Compact panels below (collapsible)
-                        ScrollView {
-                            VStack(spacing: 0) {
+                            if viewModel.budgetStatus != nil {
                                 Divider()
-                                ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
-
-                                // Phase 5: Budget panel (shown when data available)
-                                if viewModel.budgetStatus != nil {
-                                    Divider()
-                                    BudgetPanelView(budgetStatus: viewModel.budgetStatus)
-                                }
-
-                                // Phase 5: Heartbeat panel (shown when results exist)
-                                if !viewModel.heartbeatResults.isEmpty {
-                                    Divider()
-                                    HeartbeatPanelView(
-                                        heartbeatResults: viewModel.heartbeatResults,
-                                        slots: viewModel.slots
-                                    )
-                                }
-
-                                // Org chart removed — supplanted by Suite roles
+                                BudgetPanelView(budgetStatus: viewModel.budgetStatus)
                             }
-                            .padding(Theme.Spacing.sm)
+
+                            if !viewModel.heartbeatResults.isEmpty {
+                                Divider()
+                                HeartbeatPanelView(
+                                    heartbeatResults: viewModel.heartbeatResults,
+                                    slots: viewModel.slots
+                                )
+                            }
                         }
-                        .frame(maxHeight: 200)
+                        .padding(Theme.Spacing.sm)
                     }
-                    .frame(width: 280)
+                    .frame(maxHeight: 180)
                 }
             }
         }
