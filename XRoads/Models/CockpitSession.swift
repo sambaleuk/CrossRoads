@@ -21,6 +21,7 @@ struct CockpitSession: Codable, Identifiable, Hashable, Sendable {
     var projectPath: String
     var status: CockpitSessionStatus
     var chairmanBrief: String?
+    var suiteId: String?       // Active suite: "developer", "marketer", "researcher", "ops"
     var createdAt: Date
     var updatedAt: Date
 
@@ -29,6 +30,7 @@ struct CockpitSession: Codable, Identifiable, Hashable, Sendable {
         projectPath: String,
         status: CockpitSessionStatus = .idle,
         chairmanBrief: String? = nil,
+        suiteId: String? = "developer",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -36,8 +38,14 @@ struct CockpitSession: Codable, Identifiable, Hashable, Sendable {
         self.projectPath = projectPath
         self.status = status
         self.chairmanBrief = chairmanBrief
+        self.suiteId = suiteId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    /// Returns the active Suite configuration.
+    var suite: Suite {
+        Suite.builtIn.first(where: { $0.id == suiteId }) ?? .developer
     }
 }
 
@@ -53,6 +61,6 @@ extension CockpitSession: FetchableRecord, PersistableRecord {
     }
 
     enum Columns: String, ColumnExpression {
-        case id, projectPath, status, chairmanBrief, createdAt, updatedAt
+        case id, projectPath, status, chairmanBrief, suiteId, createdAt, updatedAt
     }
 }

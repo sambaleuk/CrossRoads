@@ -18,6 +18,7 @@ final class ClaudeChairmanClient: CockpitCouncilClientProtocol, @unchecked Senda
 
     func deliberate(input: ChairmanInput) async throws -> ChairmanOutput {
         let projectName = (input.projectPath as NSString).lastPathComponent
+        let suite = Suite.builtIn.first(where: { $0.id == input.suiteId }) ?? .developer
 
         // Build context for Claude
         let branchList = input.openBranches.prefix(10).joined(separator: "\n  - ")
@@ -53,25 +54,18 @@ final class ClaudeChairmanClient: CockpitCouncilClientProtocol, @unchecked Senda
         - **gemini** — Good for testing, code review, boilerplate. Cost-effective.
         - **codex** — Good for straightforward implementations. Fast.
 
-        ## Slot Roles (skillName)
-        Each slot has a ROLE, not just a code domain. Choose from:
+        ## Active Suite: \(suite.name)
+        \(suite.description)
 
-        | skillName | Action Type | Skills Loaded | Best Agent | Purpose |
-        |-----------|------------|---------------|------------|---------|
-        | `backend` | implement | prd, code-writer, commit | claude | Core logic, APIs, services |
-        | `frontend` | implement | prd, code-writer, commit | claude | UI, components, user flows |
-        | `testing` | integrationTest | integration-test, e2e-test, perf-test | gemini | E2E and integration tests |
-        | `review` | review | code-reviewer, lint | claude | Deep code review, OWASP, SOLID |
-        | `docs` | write | doc-generator | claude/gemini | README, API docs, guides |
-        | `security` | review | code-reviewer | claude | Security audit, compliance |
-        | `debug` | debug | bug-reproducer, code-reviewer, commit | claude | Bug reproduction and fix |
-        | `devops` | custom | (custom) | claude | CI/CD, infrastructure, deployment |
-        | `general` | implement | prd, code-writer, commit | claude | General improvements |
+        ## Available Roles (skillName)
+        Each slot has a ROLE. Choose from these roles defined by the active suite:
 
-        Think in PHASES: a session isn't "3 coders" — it's an orchestration.
-        - BUILD phase: 2-3 implement slots + 1 docs slot
-        - VERIFY phase: 1-2 review slots + 1 testing slot
-        - DELIVER phase: 1 docs + 1 review + merge prep
+        \(suite.roles.map { "| `\($0.id)` | \($0.name) | \($0.description) | \($0.agentPreference ?? "any") |" }.joined(separator: "\n        "))
+
+        ## Phases
+        Think in PHASES — orchestrate, don't just assign:
+
+        \(suite.phases.map { "- **\($0.name)**: \($0.description) (roles: \($0.roleIds.joined(separator: ", ")))" }.joined(separator: "\n        "))
 
         ## Your Task
         Analyze the project and output a JSON object with exactly this structure:

@@ -598,6 +598,13 @@ actor CockpitDatabaseManager {
             try db.create(index: "idx_harness_iteration_target", on: "harness_iteration", columns: ["target"])
         }
 
+        // v19: Suite ID on cockpit session
+        migrator.registerMigration("v19_session_suite_id") { db in
+            try db.alter(table: "cockpit_session") { t in
+                t.add(column: "suiteId", .text).defaults(to: "developer")
+            }
+        }
+
         return migrator
     }
 

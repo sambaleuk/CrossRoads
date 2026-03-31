@@ -259,6 +259,49 @@ actor SkillRegistry {
         return nil
     }
 
+    /// Load skills from a Suite's skill paths (e.g., vibe-marketing SKILL.md directories).
+    func loadSuiteSkills(suite: Suite) {
+        let fileManager = FileManager.default
+
+        for rawPath in suite.skillPaths {
+            // Expand ~ in paths
+            let expandedPath = (rawPath as NSString).expandingTildeInPath
+
+            guard fileManager.fileExists(atPath: expandedPath) else { continue }
+            guard let dirs = try? fileManager.contentsOfDirectory(atPath: expandedPath) else { continue }
+
+            for dir in dirs.sorted() {
+                let dirPath = (expandedPath as NSString).appendingPathComponent(dir)
+                var isDir: ObjCBool = false
+                guard fileManager.fileExists(atPath: dirPath, isDirectory: &isDir), isDir.boolValue else { continue }
+
+                // Look for SKILL.md in each subdirectory
+                let skillMdPath = (dirPath as NSString).appendingPathComponent("SKILL.md")
+                guard let content = try? String(contentsOfFile: skillMdPath, encoding: .utf8) else { continue }
+
+                // Create a Skill from the markdown content
+                let skillId = dir  // e.g., "01-brand-voice"
+                let name = dir.components(separatedBy: "-").dropFirst().joined(separator: " ").capitalized
+                let description = content.components(separatedBy: "\n")
+                    .first(where: { !$0.hasPrefix("#") && !$0.isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
+
+                let skill = Skill(
+                    id: skillId,
+                    name: name.isEmpty ? skillId : name,
+                    description: String(description.prefix(200)),
+                    promptTemplate: content,
+                    requiredTools: ["Read", "Write", "WebSearch", "Bash"],
+                    version: "1.0.0",
+                    compatibleCLIs: Set(AgentType.allCases),
+                    category: .custom,
+                    author: "vibe-marketing"
+                )
+
+                registerSkill(skill)
+            }
+        }
+    }
+
     /// Load user skills from ~/.xroads/skills/
     private func loadUserSkills() async {
         let fileManager = FileManager.default

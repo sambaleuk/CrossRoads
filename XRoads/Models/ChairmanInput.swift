@@ -21,6 +21,9 @@ struct ChairmanInput: Codable, Hashable, Sendable {
     /// Project path this context was read from
     let projectPath: String
 
+    /// Active suite ID (determines available roles and phases)
+    let suiteId: String?
+
     /// Timestamp of context collection
     let collectedAt: Date
 }

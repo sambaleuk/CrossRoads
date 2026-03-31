@@ -59,6 +59,7 @@ struct StartSessionSheet: View {
     @State private var featureName: String = ""
     @State private var sessionMode: SessionMode = .single
     @State private var selectedAgents: Set<AgentType> = [.claude]
+    @State private var selectedSuite: Suite = .developer
 
     // MARK: - UI State
 
@@ -104,6 +105,7 @@ struct StartSessionSheet: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.lg) {
                     projectSection
+                    suiteSection
                     featureSection
                     modeSection
                     agentSection
@@ -219,9 +221,87 @@ struct StartSessionSheet: View {
 
     // MARK: - Feature Section
 
+    // MARK: - Suite Section
+
+    private var suiteSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            sectionHeader("2", "Mission Suite")
+
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+            ], spacing: Theme.Spacing.sm) {
+                ForEach(Suite.builtIn, id: \.id) { suite in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedSuite = suite
+                        }
+                    } label: {
+                        HStack(spacing: Theme.Spacing.sm) {
+                            Image(systemName: suite.icon)
+                                .font(.system(size: 16))
+                                .foregroundStyle(selectedSuite.id == suite.id ? Color.accentPrimary : Color.textTertiary)
+                                .frame(width: 24)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(suite.name)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(selectedSuite.id == suite.id ? Color.textPrimary : Color.textSecondary)
+
+                                Text("\(suite.roles.count) roles")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Color.textTertiary)
+                            }
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                                .fill(selectedSuite.id == suite.id ? Color.accentPrimary.opacity(0.1) : Color.bgCanvas)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                                .stroke(selectedSuite.id == suite.id ? Color.accentPrimary.opacity(0.5) : Color.borderMuted, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Suite description + phases preview
+            VStack(alignment: .leading, spacing: 4) {
+                Text(selectedSuite.description)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.textTertiary)
+
+                HStack(spacing: 4) {
+                    ForEach(selectedSuite.phases, id: \.id) { phase in
+                        Text(phase.name)
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.accentPrimary)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(Color.accentPrimary.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+
+                        if phase.id != selectedSuite.phases.last?.id {
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 6))
+                                .foregroundStyle(Color.textTertiary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Feature Section
+
     private var featureSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader("2", "Feature")
+            sectionHeader("3", "Feature")
 
             MacTextField(
                 placeholder: "e.g., user-authentication, dark-mode, api-refactor",
@@ -249,7 +329,7 @@ struct StartSessionSheet: View {
 
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader("3", "Mode")
+            sectionHeader("4", "Mode")
 
             HStack(spacing: Theme.Spacing.md) {
                 ForEach(SessionMode.allCases, id: \.self) { mode in
@@ -300,7 +380,7 @@ struct StartSessionSheet: View {
 
     private var agentSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            sectionHeader("4", sessionMode == .single ? "Agent" : "Agents")
+            sectionHeader("5", sessionMode == .single ? "Agent" : "Agents")
 
             HStack(spacing: Theme.Spacing.md) {
                 ForEach(AgentType.allCases, id: \.self) { agent in

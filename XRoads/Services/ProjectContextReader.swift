@@ -79,6 +79,7 @@ actor ProjectContextReader {
             openBranches: branches,
             lastSession: lastSession,
             projectPath: projectPath,
+            suiteId: nil,  // Set by CockpitViewModel from active session
             collectedAt: Date()
         )
     }

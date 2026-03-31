@@ -184,7 +184,7 @@ final class CockpitViewModel {
 
     /// Starts the full cockpit activation flow: idle -> initializing -> active.
     /// Sequential slot reveal animation is driven by `revealedSlotIds`.
-    func activate(projectPath: String) async {
+    func activate(projectPath: String, suiteId: String = "developer") async {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
@@ -224,9 +224,9 @@ final class CockpitViewModel {
                 logger.info("Cleaned up \(cleaned) stale session(s) for \(projectPath)")
             }
 
-            // Step 1: Create session in idle state
+            // Step 1: Create session in idle state with active suite
             let newSession = try await repository.createSession(
-                CockpitSession(projectPath: projectPath)
+                CockpitSession(projectPath: projectPath, suiteId: suiteId)
             )
             session = newSession
 

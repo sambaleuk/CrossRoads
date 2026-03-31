@@ -85,6 +85,9 @@ final class AppState {
 
     /// Creates and activates the CockpitViewModel with all dependencies.
     /// Uses DemoCockpitCouncilClient for offline testing (no Python required).
+    /// The active suite ID, set by the Start Session sheet.
+    var activeSuiteId: String = "developer"
+
     func bootstrapCockpit() {
         guard cockpitViewModel == nil else { return }
         guard let path = projectPath, !path.isEmpty else {
@@ -139,6 +142,12 @@ final class AppState {
                     chatHistoryRepo: chatHistoryRepo
                 )
                 cockpitViewModel = vm
+
+                // Load suite-specific skills
+                let activeSuite = Suite.builtIn.first(where: { $0.id == self.activeSuiteId }) ?? .developer
+                let registry = SkillRegistry.shared
+                await registry.initialize()
+                await registry.loadSuiteSkills(suite: activeSuite)
 
                 // Listen for cockpit slot output → route to dashboard + MCP log panel
                 NotificationCenter.default.addObserver(
@@ -270,7 +279,7 @@ final class AppState {
                     ))
                 }
 
-                await vm.activate(projectPath: path)
+                await vm.activate(projectPath: path, suiteId: self.activeSuiteId)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")
             }
