@@ -765,7 +765,18 @@ actor ClaudeCodeOrchestrator {
                 guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Check for structured communication protocol prefixes first
+                // Check for suite switch command: [SUITE:marketer]
+                if trimmed.hasPrefix("[SUITE:") && trimmed.contains("]") {
+                    let suiteId = String(trimmed.dropFirst(7).prefix(while: { $0 != "]" }))
+                    NotificationCenter.default.post(
+                        name: .suiteSwitched,
+                        object: nil,
+                        userInfo: ["suiteId": suiteId, "source": "brain"]
+                    )
+                    return (type: "decision", content: "Switching suite to \(suiteId)")
+                }
+
+                // Check for structured communication protocol prefixes
                 for proto in messageProtocol {
                     if trimmed.hasPrefix(proto.prefix) {
                         let msg = String(trimmed.dropFirst(proto.prefix.count)).trimmingCharacters(in: .whitespaces)

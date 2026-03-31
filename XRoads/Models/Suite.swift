@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Suite
 
@@ -12,6 +13,8 @@ struct Suite: Codable, Identifiable, Hashable, Sendable {
     let name: String
     let description: String
     let icon: String                  // SF Symbol
+    let accentHex: String             // Primary neon color hex (e.g., "#00E6FF")
+    let glowHex: String               // Secondary glow color hex
     let roles: [SuiteRole]           // Roles the chairman can assign to slots
     let skillPaths: [String]         // Directories to load skills from
     let deliverableCategories: [String]  // What to produce in .crossroads/deliverables/
@@ -53,6 +56,8 @@ extension Suite {
         name: "Developer",
         description: "Multi-agent software development with PRD-driven orchestration",
         icon: "chevron.left.forwardslash.chevron.right",
+        accentHex: "#00E6FF",  // Cyan neon
+        glowHex: "#0099CC",
         roles: [
             SuiteRole(id: "implementer", name: "Implementer", description: "Feature development from PRD stories with unit tests", icon: "hammer.fill", skillIds: ["prd", "code-writer", "commit"], agentPreference: "claude", actionType: "implement"),
             SuiteRole(id: "tester", name: "Tester", description: "Integration, E2E, and performance testing", icon: "testtube.2", skillIds: ["integration-test", "e2e-test", "perf-test"], agentPreference: "gemini", actionType: "integrationTest"),
@@ -80,6 +85,8 @@ extension Suite {
         name: "Marketer",
         description: "Content creation, copywriting, SEO, email campaigns, and go-to-market strategy. 16 specialized marketing skills.",
         icon: "megaphone.fill",
+        accentHex: "#FF6B2B",  // Orange neon
+        glowHex: "#FF3D00",
         roles: [
             SuiteRole(id: "copywriter", name: "Copywriter", description: "Landing pages, value props, direct response copy, lead magnets", icon: "text.cursor",
                        skillIds: ["05-direct-response-copy", "01-brand-voice", "04-lead-magnet"], agentPreference: "claude", actionType: "custom"),
@@ -117,6 +124,8 @@ extension Suite {
         name: "Researcher",
         description: "Competitive intelligence, market analysis, technical research, and report generation",
         icon: "magnifyingglass.circle.fill",
+        accentHex: "#A855F7",  // Purple neon
+        glowHex: "#7C3AED",
         roles: [
             SuiteRole(id: "analyst", name: "Analyst", description: "Data analysis, pattern detection, insight extraction", icon: "chart.bar.fill", skillIds: [], agentPreference: "claude", actionType: "custom"),
             SuiteRole(id: "researcher", name: "Researcher", description: "Deep web research, paper analysis, trend mapping", icon: "book.fill", skillIds: [], agentPreference: "claude", actionType: "custom"),
@@ -140,6 +149,8 @@ extension Suite {
         name: "Operations",
         description: "Compliance audits, financial analysis, legal review, and operational reporting",
         icon: "building.2.fill",
+        accentHex: "#3FB950",  // Green neon
+        glowHex: "#238636",
         roles: [
             SuiteRole(id: "finance", name: "Finance Analyst", description: "Budget analysis, cost optimization, financial reporting", icon: "dollarsign.circle.fill", skillIds: ["finance-analyst"], agentPreference: "claude", actionType: "custom"),
             SuiteRole(id: "legal", name: "Legal Clerk", description: "Contract review, compliance checks, policy drafting", icon: "scale.3d", skillIds: ["legal-clerk"], agentPreference: "claude", actionType: "custom"),
@@ -162,4 +173,16 @@ extension Suite {
 
     /// All built-in suites.
     static let builtIn: [Suite] = [.developer, .marketer, .researcher, .ops]
+
+    /// Primary accent color for this suite.
+    var accentColor: Color {
+        Color(hex: accentHex)
+    }
+
+    /// Secondary glow color for this suite.
+    var glowColor: Color {
+        Color(hex: glowHex)
+    }
 }
+
+// Color(hex:) extension is defined in Theme.swift

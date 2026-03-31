@@ -186,6 +186,9 @@ struct MainWindowView: View {
             LoopConfigurationPanel()
         }
         .background(Color.bgApp)
+        .overlay(
+            SuiteGlowBorder(suite: Suite.builtIn.first(where: { $0.id == appState.activeSuiteId }) ?? .developer)
+        )
     }
 
     @ViewBuilder
@@ -212,6 +215,11 @@ struct MainWindowView: View {
 
     @ViewBuilder
     private var toolbarButtons: some View {
+        // Suite Switcher — mission profile selector
+        SuiteSwitcher()
+
+        Divider()
+
         // US-V4-015: Toggle Chat Panel
         Button {
             withAnimation(.easeInOut(duration: Theme.Animation.normal)) {

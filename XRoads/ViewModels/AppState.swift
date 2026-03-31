@@ -279,6 +279,33 @@ final class AppState {
                     ))
                 }
 
+                // Listen for suite switches (from toolbar or from brain)
+                NotificationCenter.default.addObserver(
+                    forName: .suiteSwitched,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let suiteId = info["suiteId"] as? String,
+                          Suite.builtIn.contains(where: { $0.id == suiteId })
+                    else { return }
+
+                    self.activeSuiteId = suiteId
+                    self.addLog(LogEntry(
+                        level: .info,
+                        source: "suite",
+                        worktree: nil,
+                        message: "Suite switched to: \(suiteId)"
+                    ))
+
+                    // Reload suite-specific skills
+                    let newSuite = Suite.builtIn.first(where: { $0.id == suiteId }) ?? .developer
+                    Task {
+                        await SkillRegistry.shared.loadSuiteSkills(suite: newSuite)
+                    }
+                }
+
                 await vm.activate(projectPath: path, suiteId: self.activeSuiteId)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")
