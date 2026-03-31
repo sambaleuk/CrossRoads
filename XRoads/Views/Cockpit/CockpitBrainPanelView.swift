@@ -10,6 +10,10 @@ enum BrainEntryType: String, Sendable {
     case loop
     case subagent
     case error
+    // Structured communication protocol types
+    case status
+    case report
+    case log
 
     init(from string: String) {
         self = BrainEntryType(rawValue: string) ?? .thinking
@@ -162,6 +166,12 @@ struct CockpitBrainPanelView: View {
             subagentRow(entry)
         case .error:
             errorRow(entry)
+        case .status:
+            statusRow(entry)
+        case .report:
+            reportRow(entry)
+        case .log:
+            logRow(entry)
         }
     }
 
@@ -267,6 +277,57 @@ struct CockpitBrainPanelView: View {
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.statusError)
                 .lineLimit(3)
+        }
+        .padding(.vertical, 1)
+    }
+
+    /// Status: cyan text with dot indicator
+    private func statusRow(_ entry: BrainEntry) -> some View {
+        HStack(alignment: .top, spacing: 4) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.statusInfo)
+                .frame(width: 2)
+
+            timestampLabel(entry.timestamp)
+
+            Text(entry.content)
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.statusInfo)
+                .lineLimit(3)
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Report: highlighted with amber left border
+    private func reportRow(_ entry: BrainEntry) -> some View {
+        HStack(alignment: .top, spacing: 4) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.statusWarning)
+                .frame(width: 2)
+
+            timestampLabel(entry.timestamp)
+
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: 7))
+                .foregroundStyle(Color.statusWarning)
+
+            Text(entry.content)
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(4)
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Log: standard info line (muted)
+    private func logRow(_ entry: BrainEntry) -> some View {
+        HStack(alignment: .top, spacing: 4) {
+            timestampLabel(entry.timestamp)
+
+            Text(entry.content)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(Color.textSecondary)
+                .lineLimit(2)
         }
         .padding(.vertical, 1)
     }

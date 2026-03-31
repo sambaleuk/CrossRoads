@@ -27,7 +27,8 @@ let package = Package(
                 "Resources/Assets.xcassets"
             ],
             resources: [
-                .copy("Resources/Skills")
+                .copy("Resources/Skills"),
+                .process("Resources/cockpit-soul.md")
             ]
         ),
         // Executable target that depends on the library

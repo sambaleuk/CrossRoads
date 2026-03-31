@@ -100,7 +100,7 @@ final class AppState {
                 let gitService = GitService()
                 let contextReader = ProjectContextReader(gitService: gitService, repository: repository)
                 let lifecycleManager = CockpitLifecycleManager(contextReader: contextReader, repository: repository)
-                let councilClient = DemoCockpitCouncilClient()
+                let councilClient = ClaudeChairmanClient()
                 let conductorService = ConductorService(
                     councilClient: councilClient,
                     repository: repository,
@@ -119,6 +119,9 @@ final class AppState {
                 let budgetRepo = BudgetRepository(dbQueue: dbQueue)
                 let budgetService = BudgetService(budgetRepository: budgetRepo, costEventRepository: costRepo)
 
+                // Chat history + wake prompt persistence
+                let chatHistoryRepo = ChatHistoryRepository(dbQueue: dbQueue)
+
                 let vm = CockpitViewModel(
                     lifecycleManager: lifecycleManager,
                     conductorService: conductorService,
@@ -132,7 +135,8 @@ final class AppState {
                     mlTrainer: mlTrainer,
                     agentMemoryRepo: agentMemoryRepo,
                     learningRepo: learningRepo,
-                    trustScoreRepo: trustScoreRepo
+                    trustScoreRepo: trustScoreRepo,
+                    chatHistoryRepo: chatHistoryRepo
                 )
                 cockpitViewModel = vm
 
@@ -240,12 +244,29 @@ final class AppState {
                           let brainType = info["type"] as? String
                     else { return }
 
-                    let level: LogLevel = brainType == "error" ? .error : .info
+                    // Map brain event types to log levels
+                    let level: LogLevel
+                    switch brainType {
+                    case "error":
+                        level = .error
+                    case "decision", "status", "report", "log", "subagent":
+                        // Structured protocol messages → always shown as info (visible)
+                        level = .info
+                    case "thinking":
+                        // Internal reasoning → debug level (dimmed/filtered in logs)
+                        level = .debug
+                    default:
+                        level = .info
+                    }
+
+                    // Skip internal thinking from MCP LOGS (it goes to Brain tab only)
+                    guard brainType != "thinking" else { return }
+
                     self.addLog(LogEntry(
                         level: level,
                         source: "cockpit-brain",
                         worktree: nil,
-                        message: "[\(brainType)] \(content)"
+                        message: "[\(brainType.uppercased())] \(content)"
                     ))
                 }
 

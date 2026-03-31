@@ -107,6 +107,9 @@ struct OrchestratorChatView: View {
         )
         .animation(.easeInOut(duration: 0.3), value: viewModel.mode)
         .task {
+            // Inject chat history repo from cockpit for DB persistence
+            viewModel.chatHistoryRepo = appState.cockpitViewModel?.chatHistoryRepo
+            viewModel.cockpitSessionId = appState.cockpitViewModel?.session?.id
             await viewModel.loadContext(from: appState)
         }
         .onChange(of: appState.projectPath) { _, newPath in
@@ -671,6 +674,11 @@ final class OrchestratorChatViewModel: ObservableObject, OrchestratorServiceDele
     private var context: ChatContext?
     private var streamingMessageId: UUID?
 
+    /// Chat history repository for DB persistence (injected from AppState)
+    var chatHistoryRepo: ChatHistoryRepository?
+    /// Current cockpit session ID for associating messages
+    var cockpitSessionId: UUID?
+
     // MARK: - Context Loading
 
     func loadContext(from appState: AppState) async {
@@ -739,6 +747,17 @@ final class OrchestratorChatViewModel: ObservableObject, OrchestratorServiceDele
             // Note: orchestratorService.sendMessage() adds user message internally,
             // so we do NOT call orchestratorService.addMessage() here to avoid duplicates.
 
+            // Persist user message to DB (fire-and-forget)
+            if let repo = chatHistoryRepo {
+                let entry = ChatHistoryEntry(
+                    sessionId: cockpitSessionId,
+                    role: "user",
+                    content: content,
+                    mode: mode.rawValue
+                )
+                Task { try? await repo.saveMessage(entry) }
+            }
+
             // Create streaming placeholder for UI
             let placeholder = ChatMessage.streamingPlaceholder()
             messages.append(placeholder)
@@ -759,6 +778,17 @@ final class OrchestratorChatViewModel: ObservableObject, OrchestratorServiceDele
             }
             streamingMessageId = nil
             lastMessageContent = response.content
+
+            // Persist assistant response to DB (fire-and-forget)
+            if let repo = chatHistoryRepo {
+                let entry = ChatHistoryEntry(
+                    sessionId: cockpitSessionId,
+                    role: "assistant",
+                    content: response.content,
+                    mode: mode.rawValue
+                )
+                Task { try? await repo.saveMessage(entry) }
+            }
 
             // Detect PRD in response
             if let prd = PRDDetector.detect(in: response.content) {

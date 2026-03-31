@@ -91,27 +91,26 @@ actor ClaudeCodeOrchestrator {
         \(chairmanBrief)
 
         ## Your Role
-        You are Slot \(slotNumber) in a multi-agent orchestration. Other agents are working in parallel on different branches. DO NOT touch files outside your assigned scope.
+        \(Self.agentRoleBrief(skillName: skillName, slotNumber: slotNumber))
+
+        You are Slot \(slotNumber) in a multi-agent orchestration. Other agents are working in parallel on different branches.
 
         ## Working Rules
         1. **Stay in your worktree** — all work happens at `\(worktreePath)`
-        2. **Read the codebase first** — understand the project structure before writing code
-        3. **Implement your assigned task**: \(taskDescription)
-        4. **Write tests** for every feature you implement
-        5. **Run tests** and ensure they pass before committing
-        6. **Commit with clear messages** — prefix with your slot: `[slot-\(slotNumber)] description`
-        7. **DO NOT** run destructive commands (rm -rf, git push --force, DROP TABLE)
-        8. **DO NOT** modify files that other agents are likely working on
-        9. **Update progress** — write learnings to `progress.txt`
+        2. **Read the codebase first** — understand the project structure before acting
+        3. **Execute your role**: \(taskDescription)
+        4. **Commit with clear messages** — prefix: `[slot-\(slotNumber)] description`
+        5. **DO NOT** run destructive commands (rm -rf, git push --force, DROP TABLE)
+        6. **DO NOT** modify files that other agents are likely working on
+        7. **Update progress** — write learnings to `progress.txt`
 
         ## Coordination
         - Other agents are working on parallel branches
         - Your branch: `\(branchName)`
         - Merge coordination is handled by the orchestrator — just commit to your branch
-        - If you encounter a blocker, write it to `progress.txt`
 
         ## Start Now
-        Begin by reading the project structure, then implement your assigned task with tests.
+        \(Self.agentStartInstruction(skillName: skillName))
         """
 
         // Write to .claude/agents/ directory
@@ -352,6 +351,82 @@ actor ClaudeCodeOrchestrator {
         return session
     }
 
+    // MARK: - Native Agent Launch (Gemini, Codex)
+
+    /// Launches a non-Claude agent (Gemini CLI, Codex) in its native non-interactive mode.
+    ///
+    /// Unlike `launchHeadless` which uses Claude's `--agent` + `--output-format stream-json`,
+    /// this method launches the agent's own CLI with its native flags:
+    /// - Gemini: positional prompt + `--yolo` for auto-approval
+    /// - Codex: `--prompt` + `--full-auto` for headless execution
+    func launchNativeAgent(
+        agentType: AgentType,
+        slotIndex: Int,
+        prompt: String,
+        worktreePath: String,
+        environment: [String: String] = [:],
+        onOutput: @escaping @MainActor @Sendable (String) -> Void,
+        onTermination: @escaping @MainActor @Sendable (Int32) -> Void
+    ) async throws -> HeadlessSession {
+
+        let adapter = agentType.adapter()
+        let executablePath = adapter.executablePath
+
+        guard FileManager.default.fileExists(atPath: executablePath) else {
+            throw CLIAdapterError.executableNotFound(cli: agentType.rawValue, path: executablePath)
+        }
+
+        var arguments: [String]
+
+        switch agentType {
+        case .gemini:
+            // Gemini CLI: positional prompt + yolo mode for full autonomy
+            arguments = [
+                "--yolo",
+                prompt
+            ]
+        case .codex:
+            // Codex CLI: prompt flag + full-auto mode
+            arguments = [
+                "--prompt", prompt,
+                "--full-auto"
+            ]
+        default:
+            // Fallback: just pass the prompt as positional arg
+            arguments = [prompt]
+        }
+
+        var env = environment
+        env["CROSSROADS_SLOT"] = String(slotIndex)
+        env["CROSSROADS_AGENT"] = agentType.rawValue
+
+        let processId = try await ptyRunner.launch(
+            executable: executablePath,
+            arguments: arguments,
+            workingDirectory: worktreePath,
+            environment: env,
+            onOutput: { rawOutput in
+                Task { @MainActor in
+                    onOutput(rawOutput)
+                }
+            },
+            onTermination: { exitCode in
+                Task { @MainActor in
+                    onTermination(exitCode)
+                }
+            }
+        )
+
+        let session = HeadlessSession(
+            processId: processId,
+            slotIndex: slotIndex,
+            agentName: "\(agentType.rawValue)-slot-\(slotIndex)"
+        )
+
+        logger.info("Launched native \(agentType.rawValue) for slot \(slotIndex): pid=\(processId)")
+        return session
+    }
+
     // MARK: - Memory Injection (US-005)
 
     /// Injects initial performance memories into an agent's memory directory.
@@ -412,7 +487,9 @@ actor ClaudeCodeOrchestrator {
     func generateCockpitBrainDefinition(
         projectPath: String,
         cop: CockpitOrchestrationPlan?,
-        activeSlots: [AgentSlot]
+        activeSlots: [AgentSlot],
+        wakeContext: String? = nil,
+        chairmanBrief: String? = nil
     ) throws {
         let agentsDir = URL(fileURLWithPath: projectPath)
             .appendingPathComponent(".claude")
@@ -421,6 +498,21 @@ actor ClaudeCodeOrchestrator {
         try FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
 
         let projectName = cop?.projectName ?? URL(fileURLWithPath: projectPath).lastPathComponent
+
+        // Load soul.md from app bundle (the brain's identity and environmental awareness)
+        let soulContent: String
+        if let soulURL = Bundle.main.url(forResource: "cockpit-soul", withExtension: "md"),
+           let content = try? String(contentsOf: soulURL, encoding: .utf8) {
+            soulContent = content
+        } else {
+            // Fallback: try to load from Resources directory in development
+            let devPath = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent() // Services/
+                .deletingLastPathComponent() // XRoads/
+                .appendingPathComponent("Resources")
+                .appendingPathComponent("cockpit-soul.md")
+            soulContent = (try? String(contentsOf: devPath, encoding: .utf8)) ?? ""
+        }
 
         // Build active slots section
         var slotLines = ""
@@ -466,12 +558,16 @@ actor ClaudeCodeOrchestrator {
         background: true
         ---
 
-        # Cockpit Brain — XRoads Project Orchestrator
+        \(soulContent)
 
-        You are the autonomous brain of the XRoads orchestration cockpit for project **\(projectName)**.
+        ---
 
-        ## Your Mission
-        You observe, analyze, and support the development process. You are NOT a dev agent — you are the CTO watching over everything.
+        # Session Context — \(projectName)
+
+        ## Chairman Strategy
+        The Chairman analyzed this project and made the following decisions:
+
+        \(chairmanBrief ?? "No chairman brief available — first session or chairman not yet deliberated.")
 
         ## Active Dev Slots
         \(slotLines)
@@ -479,43 +575,15 @@ actor ClaudeCodeOrchestrator {
         ## Current PRD
         \(prdSection)
 
-        ## Your Responsibilities
+        \(wakeContext.map { """
+        ## Previous Session Context (Self-Continuity)
+        You are resuming from a previous session. Here is what you knew:
 
-        ### 1. Monitor Dev Agents (Priority: HIGH)
-        Use `/loop 30s` to periodically:
-        - Run `git worktree list` to see active worktrees
-        - For each dev worktree: `git -C {path} diff --stat` to see changes
-        - Check prd.json story statuses if it exists
-        - Report any issues (test failures, conflicts, stalled agents)
+        \($0)
 
-        ### 2. Detect PRDs (Priority: HIGH)
-        - Watch for prd.json and prd-*.json in project root
-        - When found: read it, understand the feature, map stories to slots
-        - Adjust your support strategy based on the PRD domain
-
-        ### 3. Spawn Support Agents (Priority: MEDIUM)
-        Use @meta-monitor when dev agents are active — it watches code quality
-        Use @transverse-producer when devs are 50%+ done or when idle — it creates deliverables
-        Spawn specialists when the domain requires it (security for auth, pricing for SaaS)
-
-        ### 4. Produce When Idle (Priority: LOW)
-        When no dev agents are running:
-        - Scan project for improvements
-        - Update README if outdated
-        - Generate project health report at .crossroads/deliverables/health-report.md
-        - Use `/loop 5m` in idle mode
-
-        ### 5. React to Events
-        - Test failure → analyze and log recommendation
-        - Merge conflict → alert user
-        - Budget > 80% → recommend model switch
-        - All stories done → generate retro summary
-
-        ## Output Rules
-        - Always explain your reasoning before acting
-        - Log important observations (they appear in the MCP LOGS panel)
-        - Write deliverables to .crossroads/deliverables/
-        - Never modify dev agent worktrees — only READ them
+        Use this context to resume monitoring without re-scanning everything.
+        Verify that the previous state still holds before acting on it.
+        """ } ?? "")
 
         ## Start Now
         Begin by scanning the project structure and checking for active dev worktrees.
@@ -675,6 +743,16 @@ actor ClaudeCodeOrchestrator {
     ///
     /// - Parameter event: Parsed JSON dictionary from stream-json
     /// - Returns: Tuple of (type, content) or nil if event should be ignored
+    /// Structured message prefix → (brainType, logLevel)
+    private static let messageProtocol: [(prefix: String, brainType: String, logLevel: String)] = [
+        ("[ERROR]",    "error",    "error"),
+        ("[ALERT]",    "decision", "warn"),
+        ("[DECISION]", "decision", "info"),
+        ("[STATUS]",   "status",   "info"),
+        ("[REPORT]",   "report",   "info"),
+        ("[LOG]",      "log",      "info"),
+    ]
+
     static func categorizeBrainEvent(_ event: [String: Any]) -> (type: String, content: String)? {
         guard let eventType = event["type"] as? String else { return nil }
 
@@ -685,9 +763,18 @@ actor ClaudeCodeOrchestrator {
 
             for block in contentBlocks {
                 guard let text = block["text"] as? String else { continue }
-                let lower = text.lowercased()
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Categorize by content keywords
+                // Check for structured communication protocol prefixes first
+                for proto in messageProtocol {
+                    if trimmed.hasPrefix(proto.prefix) {
+                        let msg = String(trimmed.dropFirst(proto.prefix.count)).trimmingCharacters(in: .whitespaces)
+                        return (type: proto.brainType, content: msg)
+                    }
+                }
+
+                // Fallback: keyword-based categorization
+                let lower = trimmed.lowercased()
                 if lower.contains("spawning") || lower.contains("launching") || lower.contains("activating") {
                     return (type: "subagent", content: text)
                 }
@@ -729,6 +816,93 @@ actor ClaudeCodeOrchestrator {
 
         default:
             return nil
+        }
+    }
+
+    // MARK: - Role Briefs
+
+    /// Returns role-specific brief section for agent definition.
+    static func agentRoleBrief(skillName: String, slotNumber: Int) -> String {
+        switch skillName {
+        case "testing", "qa", "e2e", "perf":
+            return """
+            You are the **TESTER**. Your job is to verify, not to implement.
+            - Write integration tests that cover cross-module interactions
+            - Write E2E tests for critical user flows
+            - Run performance benchmarks if the project supports it
+            - Report test coverage gaps
+            - Do NOT implement features — only test what exists
+            """
+        case "review", "audit", "lint":
+            return """
+            You are the **REVIEWER**. Your job is to critique, not to build.
+            - Perform a systematic code review (OWASP top 10, SOLID, complexity)
+            - Check for security vulnerabilities, injection risks, hardcoded secrets
+            - Identify dead code, unused imports, style inconsistencies
+            - Write a review report at .crossroads/deliverables/code-review.md
+            - Fix critical issues only — leave style fixes as recommendations
+            """
+        case "docs", "documentation", "write":
+            return """
+            You are the **WRITER**. Your job is to document, not to code.
+            - Generate accurate README.md with setup, usage, and architecture
+            - Document public APIs with examples
+            - Write developer guides for key workflows
+            - Create changelog entries for recent changes
+            - All documentation goes in the project root or .crossroads/deliverables/
+            """
+        case "security", "compliance":
+            return """
+            You are the **SECURITY AUDITOR**. Your job is to find vulnerabilities.
+            - Scan for OWASP top 10 vulnerabilities
+            - Check auth flows, input validation, data exposure
+            - Review dependencies for known CVEs
+            - Write a security report at .crossroads/deliverables/security-audit.md
+            - Fix critical vulnerabilities — document the rest
+            """
+        case "debug", "fix", "bugfix":
+            return """
+            You are the **DEBUGGER**. Your job is to find and fix bugs.
+            - Reproduce the reported issue first
+            - Diagnose the root cause, not just the symptom
+            - Implement the minimal fix
+            - Write regression tests to prevent recurrence
+            """
+        case "devops", "infra", "deploy":
+            return """
+            You are the **DEVOPS ENGINEER**. Your job is infrastructure and deployment.
+            - Implement CI/CD pipelines, Dockerfiles, deployment scripts
+            - Configure monitoring and alerting
+            - Document deployment procedures
+            """
+        default:
+            return """
+            You are an **IMPLEMENTER**. Your job is to build features with quality.
+            - Implement assigned stories from the PRD
+            - Write unit tests for every feature
+            - Ensure all tests pass before committing
+            - Follow existing code patterns and conventions
+            """
+        }
+    }
+
+    /// Returns role-specific start instruction.
+    static func agentStartInstruction(skillName: String) -> String {
+        switch skillName {
+        case "testing", "qa", "e2e", "perf":
+            return "Read the codebase to understand what's been implemented, then write comprehensive tests."
+        case "review", "audit", "lint":
+            return "Read the full codebase systematically, then produce your review report."
+        case "docs", "documentation", "write":
+            return "Read the codebase and existing docs, then generate accurate documentation."
+        case "security", "compliance":
+            return "Scan the codebase for security issues, then produce your audit report."
+        case "debug", "fix", "bugfix":
+            return "Reproduce the bug, diagnose the root cause, then fix it with regression tests."
+        case "devops", "infra", "deploy":
+            return "Analyze the current infrastructure, then implement your assigned task."
+        default:
+            return "Read the project structure, then implement your assigned task with tests."
         }
     }
 

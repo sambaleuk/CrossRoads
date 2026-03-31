@@ -196,10 +196,8 @@ struct GeminiAdapter: CLIAdapter {
     }
 
     func launchArguments(worktreePath: String) -> [String] {
-        // Gemini CLI in interactive mode
-        // Working directory is set by ProcessRunner
-        // Sandbox mode is controlled by ~/.gemini/settings.json, not CLI flags
-        return []  // No flags needed for interactive mode
+        // Gemini CLI: --yolo for auto-approval in orchestrated mode
+        return ["--yolo"]
     }
 
     func formatCommand(_ command: String) -> String {

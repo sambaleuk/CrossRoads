@@ -113,6 +113,8 @@ final class CockpitViewModel {
     let learningRepo: LearningRepository?
     /// Phase 5: Trust score repository for computing agent trust (optional for backward compat)
     private let trustScoreRepo: TrustScoreRepository?
+    /// Chat history + wake prompts for cockpit self-continuity
+    let chatHistoryRepo: ChatHistoryRepository?
     private let logger = Logger(subsystem: "com.xroads", category: "CockpitVM")
 
     /// PRD-S08: Claude Code native orchestrator (lazy-initialized from ptyProcessRunner)
@@ -155,7 +157,8 @@ final class CockpitViewModel {
         mlTrainer: MLTrainer? = nil,
         agentMemoryRepo: AgentMemoryRepository? = nil,
         learningRepo: LearningRepository? = nil,
-        trustScoreRepo: TrustScoreRepository? = nil
+        trustScoreRepo: TrustScoreRepository? = nil,
+        chatHistoryRepo: ChatHistoryRepository? = nil
     ) {
         self.lifecycleManager = lifecycleManager
         self.conductorService = conductorService
@@ -174,6 +177,7 @@ final class CockpitViewModel {
         self.agentMemoryRepo = agentMemoryRepo
         self.learningRepo = learningRepo
         self.trustScoreRepo = trustScoreRepo
+        self.chatHistoryRepo = chatHistoryRepo
     }
 
     // MARK: - Activate Cockpit Mode
@@ -457,11 +461,22 @@ final class CockpitViewModel {
         guard let orchestrator else { return }
 
         do {
-            // Step 1: Generate agent definitions
+            // Step 0: Build wake context from chat history + previous sessions
+            var wakeContext = ""
+            if let chatHistoryRepo {
+                wakeContext = (try? await chatHistoryRepo.buildWakeContext(sessionId: session?.id)) ?? ""
+                if !wakeContext.isEmpty {
+                    logger.info("Injecting wake context (\(wakeContext.count) chars) into cockpit brain")
+                }
+            }
+
+            // Step 1: Generate agent definitions (with wake context + chairman brief)
             try await orchestrator.generateCockpitBrainDefinition(
                 projectPath: projectPath,
                 cop: cockpitPlan,
-                activeSlots: slots
+                activeSlots: slots,
+                wakeContext: wakeContext.isEmpty ? nil : wakeContext,
+                chairmanBrief: session?.chairmanBrief
             )
 
             // Step 2: Launch cockpit brain session
@@ -493,14 +508,79 @@ final class CockpitViewModel {
     }
 
     /// Stops the cockpit brain session gracefully.
+    /// Writes a wake prompt so the next session starts with full context.
     private func stopCockpitBrain() async {
         guard let processId = cockpitBrainProcessId, let orchestrator else {
             return
         }
 
+        // Write wake prompt before stopping (self-continuity)
+        if let chatHistoryRepo {
+            let slotSummaries = slots.map { slot in
+                [
+                    "slot": slot.slotIndex,
+                    "agent": slot.agentType,
+                    "status": slot.status.rawValue,
+                    "task": slot.currentTask ?? "none",
+                    "branch": slot.branchName ?? "none"
+                ] as [String: Any]
+            }
+            let slotJSON = (try? JSONSerialization.data(withJSONObject: slotSummaries))
+                .flatMap { String(data: $0, encoding: .utf8) }
+
+            let heartbeatSummary = heartbeatResults.map { (id, pulse) in
+                "Slot \(id.uuidString.prefix(8)): alive=\(pulse.alive), changes=\(pulse.gitChanges), tests=\(pulse.testsPassed)/\(pulse.testsPassed + pulse.testsFailed), stories=\(pulse.storiesCompleted)"
+            }.joined(separator: "\n")
+
+            let prompt = """
+            Cockpit brain shutting down. Session: \(session?.id.uuidString ?? "unknown").
+            Active slots: \(slots.filter { $0.status == .running }.count)/\(slots.count).
+            Budget: \(budgetStatus?.percentUsed ?? 0)% used.
+            \(heartbeatSummary.isEmpty ? "No heartbeat data." : "Last heartbeats:\n\(heartbeatSummary)")
+            Resume monitoring on next wake. Prioritize: check slot progress, evaluate merge readiness.
+            """
+
+            let wake = CockpitWakePrompt(
+                sessionId: session?.id,
+                prompt: prompt,
+                observations: nil,
+                pendingActions: nil,
+                slotSummaries: slotJSON
+            )
+            try? await chatHistoryRepo.saveWakePrompt(wake)
+            logger.info("Wake prompt saved for next session")
+        }
+
         await orchestrator.stopCockpitSession(processId: processId)
         cockpitBrainSession = nil
         cockpitBrainProcessId = nil
+
+        // Ingest harness proposals written by the brain during the session
+        if let chatHistoryRepo, let projectPath = session?.projectPath {
+            let proposalsPath = URL(fileURLWithPath: projectPath)
+                .appendingPathComponent(".crossroads")
+                .appendingPathComponent("harness-proposals.json")
+
+            if let data = try? Data(contentsOf: proposalsPath),
+               let proposals = try? JSONDecoder().decode([[String: String]].self, from: data) {
+                for p in proposals {
+                    guard let target = p["target"],
+                          let critique = p["critique"],
+                          let proposal = p["proposal"] else { continue }
+
+                    let iteration = HarnessIteration(
+                        sessionId: session?.id,
+                        target: target,
+                        critique: critique,
+                        proposal: proposal
+                    )
+                    try? await chatHistoryRepo.saveHarnessIteration(iteration)
+                }
+                // Clean up the file after ingestion
+                try? FileManager.default.removeItem(at: proposalsPath)
+                logger.info("Ingested \(proposals.count) harness proposals from cockpit brain")
+            }
+        }
 
         NotificationCenter.default.post(name: .cockpitBrainStopped, object: nil)
         logger.info("Cockpit brain stopped")
@@ -1099,7 +1179,7 @@ final class CockpitViewModel {
                     logger.debug("Memory injection skipped: \(error.localizedDescription)")
                 }
 
-                // --- Step 5: Launch via Claude Code headless mode ---
+                // --- Step 5: Launch agent ---
                 let slotIndex = slot.slotIndex
                 let slotNumber = slotIndex + 1
                 let taskDesc = slot.currentTask ?? "Implement assigned stories"
@@ -1107,17 +1187,20 @@ final class CockpitViewModel {
                 let agentName = URL(fileURLWithPath: agentDefPath)
                     .deletingPathExtension().lastPathComponent
 
+                // Determine role from branch name or skill name
+                let roleInstructions = Self.roleInstructions(
+                    branch: branchName, task: taskDesc, slotNumber: slotNumber
+                )
+
                 let prompt = """
                 You are Slot \(slotNumber) (\(agentType.displayName)) working on project \(projectName).
+                Your role: \(roleInstructions.role)
                 Your task: \(taskDesc)
                 Your branch: \(branchName)
 
                 Read your agent definition and the project CLAUDE.md for full context.
                 Then:
-                1. Understand the codebase structure
-                2. Implement your assigned task
-                3. Write tests
-                4. Commit with prefix [slot-\(slotNumber)]
+                \(roleInstructions.steps)
 
                 Begin now.
                 """
@@ -1126,53 +1209,74 @@ final class CockpitViewModel {
                 let slotId = slot.id
                 let agentTypeRaw = agentType.rawValue
 
-                let headlessSession = try await orchestrator.launchHeadless(
-                    slotIndex: slotIndex,
-                    agentName: agentName,
-                    prompt: prompt,
-                    worktreePath: worktreePath.path,
-                    projectPath: projectPath,
-                    sessionId: sessionIdForSlot,
-                    environment: [
-                        "CROSSROADS_SESSION_ID": self.session?.id.uuidString ?? "",
-                        "CROSSROADS_SLOT": String(slotIndex),
-                        "CROSSROADS_AGENT": agentTypeRaw,
-                        "CROSSROADS_BRANCH": branchName,
-                    ],
-                    onOutput: { output in
-                        NotificationCenter.default.post(
-                            name: .cockpitSlotOutput,
-                            object: nil,
-                            userInfo: [
-                                "slotNumber": slotNumber,
-                                "output": output,
-                                "agentType": agentTypeRaw,
-                            ]
-                        )
-                    },
-                    onTermination: { exitCode in
-                        NotificationCenter.default.post(
-                            name: .cockpitSlotTerminated,
-                            object: nil,
-                            userInfo: [
-                                "slotNumber": slotNumber,
-                                "exitCode": exitCode,
-                            ]
-                        )
-                    },
-                    onSessionId: { [weak self] capturedSessionId in
-                        // Store session_id for resume support (US-007)
-                        guard let self else { return }
-                        Task { @MainActor in
-                            if let idx = self.slots.firstIndex(where: { $0.id == slotId }) {
-                                self.slots[idx].claudeSessionId = capturedSessionId
+                let outputHandler: @MainActor @Sendable (String) -> Void = { output in
+                    NotificationCenter.default.post(
+                        name: .cockpitSlotOutput,
+                        object: nil,
+                        userInfo: [
+                            "slotNumber": slotNumber,
+                            "output": output,
+                            "agentType": agentTypeRaw,
+                        ]
+                    )
+                }
+
+                let terminationHandler: @MainActor @Sendable (Int32) -> Void = { exitCode in
+                    NotificationCenter.default.post(
+                        name: .cockpitSlotTerminated,
+                        object: nil,
+                        userInfo: [
+                            "slotNumber": slotNumber,
+                            "exitCode": exitCode,
+                        ]
+                    )
+                }
+
+                let envVars: [String: String] = [
+                    "CROSSROADS_SESSION_ID": self.session?.id.uuidString ?? "",
+                    "CROSSROADS_SLOT": String(slotIndex),
+                    "CROSSROADS_AGENT": agentTypeRaw,
+                    "CROSSROADS_BRANCH": branchName,
+                ]
+
+                let headlessSession: HeadlessSession
+
+                if agentType == .claude {
+                    // Claude: use headless mode with --agent + stream-json
+                    headlessSession = try await orchestrator.launchHeadless(
+                        slotIndex: slotIndex,
+                        agentName: agentName,
+                        prompt: prompt,
+                        worktreePath: worktreePath.path,
+                        projectPath: projectPath,
+                        sessionId: sessionIdForSlot,
+                        environment: envVars,
+                        onOutput: outputHandler,
+                        onTermination: terminationHandler,
+                        onSessionId: { [weak self] capturedSessionId in
+                            guard let self else { return }
+                            Task { @MainActor in
+                                if let idx = self.slots.firstIndex(where: { $0.id == slotId }) {
+                                    self.slots[idx].claudeSessionId = capturedSessionId
+                                }
+                                var updatedSlot = slot
+                                updatedSlot.claudeSessionId = capturedSessionId
+                                let _ = try? await self.repository.updateSlot(updatedSlot)
                             }
-                            var updatedSlot = slot
-                            updatedSlot.claudeSessionId = capturedSessionId
-                            let _ = try? await self.repository.updateSlot(updatedSlot)
                         }
-                    }
-                )
+                    )
+                } else {
+                    // Gemini/Codex: launch native CLI with its own flags
+                    headlessSession = try await orchestrator.launchNativeAgent(
+                        agentType: agentType,
+                        slotIndex: slotIndex,
+                        prompt: prompt,
+                        worktreePath: worktreePath.path,
+                        environment: envVars,
+                        onOutput: outputHandler,
+                        onTermination: terminationHandler
+                    )
+                }
 
                 // Update slot to running
                 var runningSlot = provisioningSlot
@@ -1213,6 +1317,103 @@ final class CockpitViewModel {
         }
 
         logger.info("Auto-launch complete: \(self.slots.filter { $0.status == .running }.count) agents running")
+    }
+
+    // MARK: - Role-Based Prompting
+
+    /// Maps a slot's branch/task to role-specific instructions.
+    /// Roles: implement, review, testing, docs, debug, security, devops
+    private static func roleInstructions(branch: String, task: String, slotNumber: Int) -> (role: String, steps: String) {
+        let combined = (branch + " " + task).lowercased()
+
+        if combined.contains("test") || combined.contains("qa") || combined.contains("e2e") || combined.contains("perf") {
+            return (
+                role: "TESTER — Integration, E2E, and performance testing",
+                steps: """
+                1. Read the codebase to understand what's been implemented
+                2. Write integration tests covering cross-module interactions
+                3. Write E2E tests for critical user flows
+                4. Run all tests and fix any that fail
+                5. Commit with prefix [slot-\(slotNumber)]
+                """
+            )
+        }
+
+        if combined.contains("review") || combined.contains("audit") || combined.contains("lint") {
+            return (
+                role: "REVIEWER — Deep code review and quality analysis",
+                steps: """
+                1. Read the full codebase systematically
+                2. Analyze for: OWASP top 10, SOLID violations, code complexity, dead code
+                3. Check for security issues, injection risks, hardcoded secrets
+                4. Write a review report at .crossroads/deliverables/code-review.md
+                5. Fix critical issues if found, commit with prefix [slot-\(slotNumber)]
+                """
+            )
+        }
+
+        if combined.contains("doc") || combined.contains("readme") || combined.contains("guide") || combined.contains("write") {
+            return (
+                role: "WRITER — Documentation and technical writing",
+                steps: """
+                1. Read the codebase to understand architecture and APIs
+                2. Generate/update README.md with accurate setup, usage, and architecture docs
+                3. Generate API documentation for public interfaces
+                4. Write developer guides for key workflows
+                5. Commit with prefix [slot-\(slotNumber)]
+                """
+            )
+        }
+
+        if combined.contains("security") || combined.contains("compliance") {
+            return (
+                role: "SECURITY AUDITOR — Vulnerability assessment and compliance",
+                steps: """
+                1. Scan the codebase for security vulnerabilities
+                2. Check auth flows, input validation, data exposure
+                3. Review dependency versions for known CVEs
+                4. Write security audit report at .crossroads/deliverables/security-audit.md
+                5. Fix critical vulnerabilities, commit with prefix [slot-\(slotNumber)]
+                """
+            )
+        }
+
+        if combined.contains("debug") || combined.contains("fix") || combined.contains("bug") {
+            return (
+                role: "DEBUGGER — Bug reproduction, diagnosis, and fix",
+                steps: """
+                1. Reproduce the reported issue
+                2. Diagnose the root cause (not just the symptom)
+                3. Implement the fix with minimal blast radius
+                4. Write regression tests
+                5. Commit with prefix [slot-\(slotNumber)]
+                """
+            )
+        }
+
+        if combined.contains("devops") || combined.contains("deploy") || combined.contains("ci") || combined.contains("infra") {
+            return (
+                role: "DEVOPS — Infrastructure, CI/CD, and deployment",
+                steps: """
+                1. Analyze current infrastructure and deployment setup
+                2. Implement the assigned infrastructure task
+                3. Test the pipeline/deployment locally
+                4. Document changes in deployment guide
+                5. Commit with prefix [slot-\(slotNumber)]
+                """
+            )
+        }
+
+        // Default: implementer
+        return (
+            role: "IMPLEMENTER — Feature development and unit testing",
+            steps: """
+            1. Understand the codebase structure
+            2. Implement your assigned task
+            3. Write unit tests with good coverage
+            4. Commit with prefix [slot-\(slotNumber)]
+            """
+        )
     }
 
     // MARK: - Intelligence Wiring: Slot Termination

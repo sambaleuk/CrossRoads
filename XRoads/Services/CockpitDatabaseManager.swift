@@ -551,6 +551,53 @@ actor CockpitDatabaseManager {
             }
         }
 
+        // v17: Chat history persistence + cockpit wake prompts
+        migrator.registerMigration("v17_chat_history_and_wake_prompts") { db in
+            // Chat history — persists user↔orchestrator conversations
+            try db.create(table: "chat_history") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("sessionId", .text)
+                    .references("cockpit_session", onDelete: .cascade)
+                t.column("role", .text).notNull()        // user, assistant, system
+                t.column("content", .text).notNull()
+                t.column("mode", .text)                   // api, terminal, artDirector
+                t.column("metadata", .text)               // JSON — actions, PRD refs, etc.
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_chat_history_session", on: "chat_history", columns: ["sessionId"])
+            try db.create(index: "idx_chat_history_created", on: "chat_history", columns: ["createdAt"])
+
+            // Cockpit wake prompts — self-continuity across restarts
+            try db.create(table: "cockpit_wake_prompt") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("sessionId", .text)
+                    .references("cockpit_session", onDelete: .cascade)
+                t.column("prompt", .text).notNull()       // The wake-up context
+                t.column("observations", .text)            // JSON — what the cockpit observed
+                t.column("pendingActions", .text)           // JSON — actions it was about to take
+                t.column("slotSummaries", .text)           // JSON — per-slot progress at shutdown
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_wake_prompt_session", on: "cockpit_wake_prompt", columns: ["sessionId"])
+        }
+
+        // v18: Harness iterations — self-improvement proposals from cockpit brain
+        migrator.registerMigration("v18_harness_iteration") { db in
+            try db.create(table: "harness_iteration") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("sessionId", .text)
+                    .references("cockpit_session", onDelete: .cascade)
+                t.column("target", .text).notNull()          // what was improved: "skill:prd", "chairman:prompt", "agent-def:slot-1"
+                t.column("critique", .text).notNull()         // what went wrong / could be better
+                t.column("proposal", .text).notNull()         // the proposed modification
+                t.column("applied", .boolean).notNull().defaults(to: false)
+                t.column("impact", .text)                     // JSON — measured impact after application
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_harness_iteration_session", on: "harness_iteration", columns: ["sessionId"])
+            try db.create(index: "idx_harness_iteration_target", on: "harness_iteration", columns: ["target"])
+        }
+
         return migrator
     }
 
