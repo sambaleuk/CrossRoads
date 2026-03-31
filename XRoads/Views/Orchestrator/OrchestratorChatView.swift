@@ -742,6 +742,34 @@ final class OrchestratorChatViewModel: ObservableObject, OrchestratorServiceDele
         currentBranch = branch
 
         await orchestratorService.setContext(context!)
+
+        // Inject cockpit brain awareness into chat system prompt
+        if let cockpitVM = appState.cockpitViewModel {
+            let suite = cockpitVM.session?.suite ?? .developer
+            let slotSummary = cockpitVM.slots.map { slot in
+                "  - Slot \(slot.slotIndex + 1) (\(slot.agentType)): \(slot.currentTask ?? "idle") [\(slot.status.rawValue)]"
+            }.joined(separator: "\n")
+
+            let cockpitSection = """
+            ## Cockpit Brain (Active)
+            You are part of the XRoads system. A cockpit brain runs in parallel — it's the same intelligence as you, monitoring the project autonomously.
+
+            **Active Suite:** \(suite.name) (\(suite.roles.count) roles, phases: \(suite.phases.map(\.name).joined(separator: " → ")))
+
+            **Active Slots:**
+            \(slotSummary.isEmpty ? "  No active slots" : slotSummary)
+
+            **Chairman Brief:**
+            \(cockpitVM.chairmanBrief ?? "No brief yet")
+
+            The brain sends you messages prefixed with 🧠. You can reference its observations.
+            When the user asks about slot progress, agent status, or the orchestration — you have this context.
+            You and the brain are two halves of one intelligence. The brain watches, you talk.
+            """
+
+            await orchestratorService.setCockpitContext(cockpitSection)
+        }
+
         await orchestratorService.updateSystemPrompt(mode: mode)
         await orchestratorService.setDelegate(self)
 

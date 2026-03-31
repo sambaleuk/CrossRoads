@@ -322,6 +322,14 @@ actor OrchestratorService {
         self.delegate = delegate
     }
 
+    /// Cockpit context to inject into system prompt (set by OrchestratorChatView)
+    private var cockpitContext: String?
+
+    /// Set cockpit brain context for system prompt injection
+    func setCockpitContext(_ context: String?) {
+        self.cockpitContext = context
+    }
+
     /// Update system prompt with context
     func updateSystemPrompt(_ customPrompt: String? = nil, mode: OrchestratorMode = .api) {
         var prompt: String
@@ -332,6 +340,9 @@ actor OrchestratorService {
         }
         if let ctx = context {
             prompt += "\n\n" + ctx.systemPromptSection
+        }
+        if let cockpit = cockpitContext {
+            prompt += "\n\n" + cockpit
         }
         self.systemPrompt = prompt
     }
