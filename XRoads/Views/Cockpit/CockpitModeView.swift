@@ -30,49 +30,45 @@ struct CockpitModeView: View {
 
                     Divider()
 
-                    // Right sidebar: Brain + Chairman Feed + Phase 5 panels
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            // Cockpit Brain panel (first in sidebar)
-                            CockpitBrainPanelView(
-                                cop: viewModel.cockpitPlan,
-                                adaptationActions: viewModel.adaptationActions
-                            )
+                    // Right sidebar: Brain (maximized) + compact panels
+                    VStack(spacing: 0) {
+                        // Brain panel gets maximum space — the consciousness stream
+                        CockpitBrainPanelView(
+                            cop: viewModel.cockpitPlan,
+                            adaptationActions: viewModel.adaptationActions
+                        )
+                        .frame(maxHeight: .infinity)
 
-                            if viewModel.cockpitPlan != nil {
+                        // Compact panels below (collapsible)
+                        ScrollView {
+                            VStack(spacing: 0) {
                                 Divider()
-                            }
+                                ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
 
-                            ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
+                                // Phase 5: Budget panel (shown when data available)
+                                if viewModel.budgetStatus != nil {
+                                    Divider()
+                                    BudgetPanelView(budgetStatus: viewModel.budgetStatus)
+                                }
 
-                            // Phase 5: Org Chart panel (shown when roles exist)
-                            if !viewModel.orgRoles.isEmpty {
-                                Divider()
-                                OrgChartPanelView(orgRoles: viewModel.orgRoles)
-                            }
+                                // Phase 5: Heartbeat panel (shown when results exist)
+                                if !viewModel.heartbeatResults.isEmpty {
+                                    Divider()
+                                    HeartbeatPanelView(
+                                        heartbeatResults: viewModel.heartbeatResults,
+                                        slots: viewModel.slots
+                                    )
+                                }
 
-                            // Phase 5: Budget panel (shown when data available)
-                            if viewModel.budgetStatus != nil {
-                                Divider()
-                                BudgetPanelView(budgetStatus: viewModel.budgetStatus)
+                                // Phase 5: Org Chart panel (shown when roles exist)
+                                if !viewModel.orgRoles.isEmpty {
+                                    Divider()
+                                    OrgChartPanelView(orgRoles: viewModel.orgRoles)
+                                }
                             }
-
-                            // Phase 5: Model Routing panel
-                            if viewModel.modelRecommendation != nil || viewModel.session != nil {
-                                Divider()
-                                ModelRoutingView(recommendation: viewModel.modelRecommendation)
-                            }
-
-                            // Phase 5: Heartbeat panel (shown when results exist)
-                            if !viewModel.heartbeatResults.isEmpty {
-                                Divider()
-                                HeartbeatPanelView(
-                                    heartbeatResults: viewModel.heartbeatResults,
-                                    slots: viewModel.slots
-                                )
-                            }
+                            .padding(Theme.Spacing.sm)
                         }
-                        .padding(Theme.Spacing.sm)
+                        .frame(maxHeight: 200)
                     }
                     .frame(width: 280)
                 }

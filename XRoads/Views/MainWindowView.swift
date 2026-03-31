@@ -384,7 +384,17 @@ private struct RightSidePanel: View {
             Divider()
                 .background(Color.borderMuted)
 
-            // Section 3: MCP Logs (fills remaining space)
+            // Section 3: Model Routing (shown when cockpit is active)
+            if let vm = appState.cockpitViewModel,
+               vm.modelRecommendation != nil || vm.session != nil {
+                ModelRoutingView(recommendation: vm.modelRecommendation)
+                    .frame(height: 140)
+
+                Divider()
+                    .background(Color.borderMuted)
+            }
+
+            // Section 4: MCP Logs (fills remaining space)
             MCPLogsSection()
         }
         .background(Color.bgCanvas)
