@@ -189,9 +189,10 @@ final class CockpitViewModel {
         errorMessage = nil
 
         do {
-            // Step 0: Try to load an existing active session (e.g. from a previous crash).
-            // If one exists, reuse it instead of creating a new one.
-            if let existing = try await repository.activeSession(for: projectPath) {
+            // Step 0: Try to recover an existing active session.
+            // Skip sessions stuck in "initializing" — they're stale.
+            if let existing = try await repository.activeSession(for: projectPath),
+               existing.status == .active || existing.status == .paused {
                 logger.info("Found existing session \(existing.id) — recovering")
                 session = existing
                 slots = try await repository.fetchSlots(sessionId: existing.id)
@@ -200,24 +201,24 @@ final class CockpitViewModel {
                 startChairmanBriefRefresh()
                 startGatePolling()
                 startCostPolling()
-                // orgChartRefresh removed — supplanted by Suite roles
                 startHeartbeatPolling()
                 startBudgetPolling()
 
-                // Auto-launch any slots that are still empty (not yet running)
+                // Auto-launch any slots that are still empty
                 let emptySlots = slots.filter { $0.status == .empty }
                 if !emptySlots.isEmpty {
-                    logger.info("Found \(emptySlots.count) empty slots — auto-launching")
                     await autoLaunchAssignedSlots(emptySlots, projectPath: projectPath)
                 }
 
+                // Start brain (was missing in recovery path!)
+                await startCockpitBrain(projectPath: projectPath)
+
                 isLoading = false
-                let slotCount = self.slots.count
-                logger.info("Recovered session with \(slotCount) slots")
+                logger.info("Recovered session with \(self.slots.count) slots + brain started")
                 return
             }
 
-            // Step 0b: Clean up any leftover stale sessions (closed/orphaned) to avoid UNIQUE constraint errors
+            // Step 0b: Clean up stale sessions (initializing, closed, orphaned)
             let cleaned = try await repository.cleanupStaleSessions(projectPath: projectPath)
             if cleaned > 0 {
                 logger.info("Cleaned up \(cleaned) stale session(s) for \(projectPath)")
