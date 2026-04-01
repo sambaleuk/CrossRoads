@@ -873,19 +873,24 @@ actor ClaudeCodeOrchestrator {
         }
 
         let contextPrompt = """
+        You are Claude, running as an autonomous project monitor inside a multi-agent coding orchestrator called XRoads.
+
+        Your role in this session: scan the project, analyze what's happening, and take action.
+
         Project: \(projectName) at \(projectPath)
         Domain: \(domainInfo)
         \(activeSlots.isEmpty ? "No agents running." : "\(activeSlots.count) agents active:\n\(slotLines)")
 
-        You are a living component of XRoads — not a tool, not a feature. You are the brain.
-        You run in full autonomy with --dangerously-skip-permissions and --add-dir on the parent directory.
-        You have 6 agent slots you can fill using [LAUNCH:agent:role:task].
-        You talk to the operator via [CHAT].
+        What you can do:
+        - Use the @scanner agent to get a project state report
+        - Use the @advisor agent to produce recommendations
+        - Use [CHAT] prefix to send messages to the operator's chat panel
+        - Use [LAUNCH:claude:backend:task description] to create new agent slots (up to 6)
+        - Read files, run git commands, analyze the codebase
 
-        Your agent definition (cockpit-brain.md) contains your full soul — your identity, your protocols, your arsenal.
-        Read it if this is your first cycle. Then act on what you see.
+        Your agent definition (cockpit-brain.md) has detailed instructions on all protocols and available agents.
 
-        This is cycle start. Observe the project state and act accordingly.
+        Start by scanning the project state. If agents are running, check their progress. If not, decide what needs doing and act.
         """
 
         // Use slotIndex -1 to distinguish cockpit brain from dev slots
