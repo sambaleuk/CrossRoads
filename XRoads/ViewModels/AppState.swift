@@ -372,6 +372,19 @@ final class AppState {
                     }
                 }
 
+                // Listen for cockpit session records (history)
+                NotificationCenter.default.addObserver(
+                    forName: .cockpitSessionRecordReady,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let record = notification.userInfo?["record"] as? OrchestrationRecord
+                    else { return }
+                    self.historyRecords.insert(record, at: 0)
+                    Task { await self.services.historyService.append(record: record) }
+                }
+
                 await vm.activate(projectPath: path, suiteId: self.activeSuiteId)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")

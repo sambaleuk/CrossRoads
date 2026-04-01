@@ -436,7 +436,46 @@ final class CockpitViewModel {
                 }
             }
 
-            logger.info("Cockpit session closed")
+            // Save orchestration record to history
+            let completedCount = closedSlots.filter { $0.status == .done }.count
+            let failedCount = closedSlots.filter { $0.status == .error }.count
+            let branches = closedSlots.compactMap { $0.branchName }
+            let agentMetrics = closedSlots.map { slot -> AgentRunMetric in
+                AgentRunMetric(
+                    agentId: "slot-\(slot.slotIndex)",
+                    agentType: AgentType(rawValue: slot.agentType),
+                    storiesTotal: 1,
+                    storiesCompleted: slot.status == .done ? 1 : 0,
+                    state: slot.status == .done ? .finished : (slot.status == .error ? .error : .idle),
+                    durationSeconds: Date().timeIntervalSince(slot.createdAt),
+                    lastMessage: slot.currentTask,
+                    errors: slot.status == .error ? ["Agent failed"] : []
+                )
+            }
+
+            let record = OrchestrationRecord(
+                id: UUID(),
+                startedAt: current.createdAt,
+                finishedAt: Date(),
+                prdName: current.chairmanBrief?.components(separatedBy: "\n").first ?? current.projectPath.components(separatedBy: "/").last ?? "Session",
+                prdPath: nil,
+                resultSummary: failedCount > 0 ? "Partial" : (completedCount > 0 ? "Completed" : "No agents"),
+                mergedBranches: branches,
+                conflicts: [],
+                totalStories: closedSlots.count,
+                completedStories: completedCount,
+                agentMetrics: agentMetrics,
+                errors: []
+            )
+
+            // Post to AppState for persistence
+            NotificationCenter.default.post(
+                name: .cockpitSessionRecordReady,
+                object: nil,
+                userInfo: ["record": record]
+            )
+
+            logger.info("Cockpit session closed — \(completedCount)/\(closedSlots.count) slots completed")
         } catch {
             errorMessage = error.localizedDescription
             logger.error("Close failed: \(error.localizedDescription)")

@@ -85,4 +85,8 @@ extension Notification.Name {
     /// Posted when the brain requests a slot launch.
     /// UserInfo: "agentType" (String), "role" (String), "task" (String)
     static let brainRequestsSlotLaunch = Notification.Name("brainRequestsSlotLaunch")
+
+    /// Posted when a cockpit session closes with an OrchestrationRecord ready for persistence.
+    /// UserInfo: "record" (OrchestrationRecord)
+    static let cockpitSessionRecordReady = Notification.Name("cockpitSessionRecordReady")
 }
