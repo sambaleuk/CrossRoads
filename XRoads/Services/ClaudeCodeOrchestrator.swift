@@ -686,28 +686,56 @@ actor ClaudeCodeOrchestrator {
     ) async throws -> HeadlessSession {
         let projectName = cop?.projectName ?? URL(fileURLWithPath: projectPath).lastPathComponent
 
-        // Build the initial context prompt
-        var contextParts: [String] = []
-        contextParts.append("You are the cockpit brain for project '\(projectName)' at \(projectPath).")
-
+        // Build the context prompt — operational, not generic
+        var slotSection = ""
         if !activeSlots.isEmpty {
-            contextParts.append("Active dev slots:")
-            for slot in activeSlots {
+            let slotLines = activeSlots.map { slot -> String in
                 let branch = slot.branchName ?? "unassigned"
                 let task = slot.currentTask ?? "no task"
-                contextParts.append("  - Slot \(slot.slotIndex + 1) (\(slot.agentType)): \(task) on branch \(branch)")
+                let worktree = slot.worktreePath ?? "unknown"
+                return "- Slot \(slot.slotIndex + 1) (\(slot.agentType)): \(task)\n  Branch: \(branch)\n  Worktree: \(worktree)"
             }
+            slotSection = """
+            \(activeSlots.count) dev agents are currently running:
+            \(slotLines.joined(separator: "\n"))
+
+            For EACH slot, do this NOW:
+            1. Run `git -C {worktree_path} log --oneline -5` to see recent commits
+            2. Run `git -C {worktree_path} diff --stat` to see current changes
+            3. Check if prd.json exists and read story statuses
+
+            After scanning all slots, send ONE summary to the operator:
+            [CHAT] Monitoring \(activeSlots.count) agents: {brief status of each slot}
+
+            Then check for issues:
+            - Any slot with 0 commits after 5+ minutes? → [CHAT] Slot N seems stalled
+            - Any test failures in output? → [CHAT] Slot N has test failures
+            - All stories complete? → [CHAT] All stories done — ready for merge review
+            """
         } else {
-            contextParts.append("No dev slots currently running. Enter idle/initiative mode.")
+            slotSection = """
+            No dev agents running. Scan the project for:
+            1. Run `ls` to understand the project structure
+            2. Check for prd.json or prd-*.json files
+            3. Read README.md if it exists
+
+            Then send a summary:
+            [CHAT] Scanned {project_name}: {tech stack}, {file count} files, {any issues found}
+            """
         }
 
-        if let cop {
-            contextParts.append("Domain: \(cop.domain), Type: \(cop.projectType), Market: \(cop.marketContext)")
-        }
+        let domainInfo = cop.map { "Domain: \($0.domain), Type: \($0.projectType)" } ?? ""
 
-        contextParts.append("Begin monitoring. Scan project structure, check for PRDs, and watch dev worktrees.")
+        let contextPrompt = """
+        You are the cockpit brain for '\(projectName)' at \(projectPath).
+        \(domainInfo)
 
-        let contextPrompt = contextParts.joined(separator: "\n")
+        \(slotSection)
+
+        Remember: use [CHAT] to send important messages to the operator's chat panel.
+        Use [STATUS], [ALERT], [REPORT] for the Brain tab and MCP LOGS.
+        Keep your thinking minimal — focus on actions and observations.
+        """
 
         // Use slotIndex -1 to distinguish cockpit brain from dev slots
         let session = try await launchHeadless(

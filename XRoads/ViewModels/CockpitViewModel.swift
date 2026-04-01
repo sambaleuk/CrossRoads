@@ -505,21 +505,8 @@ final class CockpitViewModel {
             NotificationCenter.default.post(name: .cockpitBrainStarted, object: nil)
             logger.info("Cockpit brain started successfully")
 
-            // Announce to chat only on first start (not cycle restarts)
-            if !brainHasAnnounced {
-                brainHasAnnounced = true
-                let slotCount = slots.count
-                let suiteName = session?.suite.name ?? "Developer"
-                let runningSlots = slots.filter { $0.status == .running }
-                let slotDetail = runningSlots.isEmpty
-                    ? "No agents running yet."
-                    : runningSlots.map { "Slot \($0.slotIndex + 1) (\($0.agentType))" }.joined(separator: ", ")
-                NotificationCenter.default.post(
-                    name: .cockpitBrainToChat,
-                    object: nil,
-                    userInfo: ["content": "Cockpit brain online. Suite: \(suiteName). \(slotDetail)"]
-                )
-            }
+            // Brain will announce itself via [CHAT] in its own output — no generic message needed
+            brainHasAnnounced = true
         } catch {
             // Non-fatal: cockpit works without brain session
             logger.error("Cockpit brain launch failed: \(error.localizedDescription)")
@@ -1349,20 +1336,7 @@ final class CockpitViewModel {
 
         let runningCount = self.slots.filter { $0.status == .running }.count
         logger.info("Auto-launch complete: \(runningCount) agents running")
-
-        // Notify chat that orchestration is active
-        if runningCount > 0 {
-            let slotDetail = self.slots
-                .filter { $0.status == .running }
-                .map { "Slot \($0.slotIndex + 1) (\($0.agentType)): \($0.currentTask ?? "working")" }
-                .joined(separator: "\n  ")
-
-            NotificationCenter.default.post(
-                name: .cockpitBrainToChat,
-                object: nil,
-                userInfo: ["content": "Orchestration started — \(runningCount) agents launched:\n  \(slotDetail)"]
-            )
-        }
+        // Brain will detect the new slots at its next cycle and report via [CHAT]
     }
 
     // MARK: - Role-Based Prompting
