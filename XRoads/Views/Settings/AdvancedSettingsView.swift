@@ -5,6 +5,11 @@ import SwiftUI
 /// Phase 5: Advanced settings — heartbeat config, ML controls, data management.
 public struct AdvancedSettingsView: View {
 
+    // Cockpit Brain
+    @AppStorage("brainCycleDelaySeconds") private var brainCycleDelay = 5
+    @AppStorage("brainMaxCrashRestarts") private var brainMaxCrashRestarts = 3
+    @AppStorage("brainEnabled") private var brainEnabled = true
+
     // Heartbeat
     @AppStorage("heartbeatIntervalMs") private var heartbeatIntervalMs = 30000
     @AppStorage("heartbeatMaxFailures") private var maxFailures = 5
@@ -25,6 +30,7 @@ public struct AdvancedSettingsView: View {
 
     public var body: some View {
         Form {
+            cockpitBrainSection
             heartbeatSection
             mlSection
             schedulingSection
@@ -35,6 +41,39 @@ public struct AdvancedSettingsView: View {
         .scrollContentBackground(.hidden)
         .background(Color.bgSurface)
         .padding()
+    }
+
+    // MARK: - Cockpit Brain
+
+    private var cockpitBrainSection: some View {
+        Section {
+            Toggle("Enable Cockpit Brain", isOn: $brainEnabled)
+                .foregroundStyle(Color.textPrimary)
+
+            if brainEnabled {
+                Picker("Monitoring Cycle Delay", selection: $brainCycleDelay) {
+                    Text("2s (aggressive)").tag(2)
+                    Text("5s (default)").tag(5)
+                    Text("10s (relaxed)").tag(10)
+                    Text("30s (minimal)").tag(30)
+                    Text("60s (lazy)").tag(60)
+                }
+                .foregroundStyle(Color.textPrimary)
+
+                Stepper("Max Crash Restarts: \(brainMaxCrashRestarts)", value: $brainMaxCrashRestarts, in: 1...10)
+                    .foregroundStyle(Color.textPrimary)
+
+                Text("Brain scans the project, reports status, then restarts after \(brainCycleDelay)s. Crash restarts are limited to \(brainMaxCrashRestarts) attempts.")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.textTertiary)
+            }
+        } header: {
+            Label("Cockpit Brain", systemImage: "brain.head.profile")
+                .foregroundStyle(Color.textPrimary)
+        } footer: {
+            Text("The brain is a Claude Code session that monitors dev agents, produces deliverables, and sends status to the chat. It cycles continuously while the session is active.")
+                .foregroundStyle(Color.textTertiary)
+        }
     }
 
     // MARK: - Heartbeat
@@ -204,6 +243,9 @@ public struct AdvancedSettingsView: View {
     }
 
     private func resetAdvancedToDefaults() {
+        brainCycleDelay = 5
+        brainMaxCrashRestarts = 3
+        brainEnabled = true
         heartbeatIntervalMs = 30000
         maxFailures = 5
         heartbeatEnabled = true

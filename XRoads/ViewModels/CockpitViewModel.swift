@@ -445,6 +445,10 @@ final class CockpitViewModel {
     /// and launches the brain as a long-running headless session. Output is parsed and routed
     /// to .cockpitBrainOutput notifications for the Brain panel and MCP logs.
     private func startCockpitBrain(projectPath: String) async {
+        guard brainEnabled else {
+            logger.info("Cockpit brain disabled in settings")
+            return
+        }
         guard let runner = ptyProcessRunner else {
             logger.info("No PTY runner — cockpit brain not launched (offline mode)")
             return
@@ -625,9 +629,19 @@ final class CockpitViewModel {
     }
 
     /// Handles cockpit brain process termination.
-    /// Tracks consecutive brain restarts to prevent infinite crash loops
+    /// Tracks consecutive brain crash restarts to prevent infinite crash loops
     private var brainRestartCount = 0
-    private static let maxBrainRestarts = 3
+
+    /// Read brain settings from UserDefaults (configurable in Settings > Advanced)
+    private var brainCycleDelay: Int {
+        UserDefaults.standard.object(forKey: "brainCycleDelaySeconds") as? Int ?? 5
+    }
+    private var brainMaxCrashRestarts: Int {
+        UserDefaults.standard.object(forKey: "brainMaxCrashRestarts") as? Int ?? 3
+    }
+    private var brainEnabled: Bool {
+        UserDefaults.standard.object(forKey: "brainEnabled") as? Bool ?? true
+    }
 
     private func handleCockpitBrainTermination(exitCode: Int32) {
         cockpitBrainSession = nil
@@ -655,8 +669,9 @@ final class CockpitViewModel {
 
         if exitCode != 0 {
             // Crash recovery: limited restarts
-            guard brainRestartCount < Self.maxBrainRestarts else {
-                logger.error("Brain crash restart limit reached (\(Self.maxBrainRestarts))")
+            let maxCrash = self.brainMaxCrashRestarts
+            guard brainRestartCount < maxCrash else {
+                logger.error("Brain crash restart limit reached (\(maxCrash))")
                 NotificationCenter.default.post(
                     name: .cockpitBrainOutput,
                     object: nil,
@@ -666,11 +681,11 @@ final class CockpitViewModel {
             }
             self.brainRestartCount += 1
             let attempt = self.brainRestartCount
-            logger.info("Brain crashed — restarting (attempt \(attempt)/\(Self.maxBrainRestarts))...")
+            logger.info("Brain crashed — restarting (attempt \(attempt)/\(maxCrash))...")
             NotificationCenter.default.post(
                 name: .cockpitBrainOutput,
                 object: nil,
-                userInfo: ["type": "decision", "content": "Brain crash restart (\(attempt)/\(Self.maxBrainRestarts))...", "timestamp": Date()]
+                userInfo: ["type": "decision", "content": "Brain crash restart (\(attempt)/\(maxCrash))...", "timestamp": Date()]
             )
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(3))
@@ -679,15 +694,16 @@ final class CockpitViewModel {
         } else {
             // Normal cycle: brain finished its scan, restart to continue monitoring (unlimited)
             self.brainRestartCount = 0  // Reset crash counter on normal exit
-            logger.info("Brain cycle complete — restarting in 5s for next monitoring cycle")
+            let delay = self.brainCycleDelay
+            logger.info("Brain cycle complete — restarting in \(delay)s for next monitoring cycle")
             NotificationCenter.default.post(
                 name: .cockpitBrainOutput,
                 object: nil,
-                userInfo: ["type": "loop", "content": "Monitoring cycle complete. Restarting...", "timestamp": Date()]
+                userInfo: ["type": "loop", "content": "Monitoring cycle complete. Next scan in \(delay)s...", "timestamp": Date()]
             )
             Task { @MainActor in
-                try? await Task.sleep(for: .seconds(5))
-                guard self.session?.status == .active else { return }
+                try? await Task.sleep(for: .seconds(delay))
+                guard self.session?.status == .active, self.brainEnabled else { return }
                 await startCockpitBrain(projectPath: session.projectPath)
             }
         }
