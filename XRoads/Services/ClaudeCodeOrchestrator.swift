@@ -72,7 +72,7 @@ actor ClaudeCodeOrchestrator {
         hooks:
           Stop:
             - type: prompt
-              prompt: "Have all assigned tasks been completed with passing tests? If not, list remaining work."
+              prompt: "BEFORE stopping: 1) Run the project's build/test command. 2) Fix any errors. 3) Only stop if build passes. If you cannot verify, list what's untested."
         ---
 
         # Agent Brief — Slot \(slotNumber) [\(agentType)]
@@ -228,6 +228,38 @@ actor ClaudeCodeOrchestrator {
 
         ## Chairman Brief
         \(chairmanBrief)
+
+        ## Agent Quality Overrides
+
+        ### Forced Verification
+        You are FORBIDDEN from reporting a task as complete until you have:
+        - Run the project's test/build command and confirmed it passes
+        - If TypeScript: `npx tsc --noEmit` before claiming success
+        - If Python: `python -m pytest` or equivalent
+        - If Rust: `cargo check`
+        - If Swift: `swift build`
+        Fixed ALL resulting errors. A successful file write is NOT a successful task.
+
+        ### Senior Dev Standard
+        Do NOT "try the simplest approach" or "avoid improvements beyond what was asked."
+        If architecture is flawed, state is duplicated, or patterns are inconsistent — fix them.
+        Ask yourself: "What would a senior perfectionist dev reject in code review?" Fix all of it.
+
+        ### File Read Safety
+        Each file read is capped at 2,000 lines. For files over 500 LOC:
+        - Read in chunks using offset and limit parameters
+        - Never assume a single read captured the full file
+        - Re-read any file before editing if more than 5 messages have passed
+
+        ### Search Completeness
+        Grep is text matching, not semantic analysis. When renaming or changing any function:
+        - Search for direct calls, type references, string literals, dynamic imports
+        - Search re-exports, barrel files, test mocks separately
+        - If results look suspiciously small, re-run with narrower scope
+
+        ### Context Decay
+        After 10+ tool calls, re-read files before editing. Auto-compaction may have
+        destroyed your memory of file contents. Never trust stale context.
 
         @prd.json
         """
