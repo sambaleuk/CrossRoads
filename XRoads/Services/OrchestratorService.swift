@@ -80,6 +80,9 @@ actor OrchestratorService {
     private var terminalCancelled = false
     private var toolExecutor: ToolExecutor?
 
+    /// Last Claude CLI session ID captured from stream-json output (Feature: session resume)
+    private var lastSessionId: String?
+
     // MARK: - Constants
 
     private static let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
@@ -359,9 +362,20 @@ actor OrchestratorService {
         return conversationHistory
     }
 
-    /// Clear the conversation history
+    /// Clear the conversation history and reset session resume state
     func clearConversation() {
         conversationHistory.removeAll()
+        lastSessionId = nil
+    }
+
+    /// Get the last captured Claude CLI session ID (for resume support)
+    func getLastSessionId() -> String? {
+        return lastSessionId
+    }
+
+    /// Manually set a session ID for resume (e.g., from a recovered orphan)
+    func setLastSessionId(_ sessionId: String?) {
+        self.lastSessionId = sessionId
     }
 
     /// Update a message in the conversation (e.g., for streaming)
@@ -684,13 +698,19 @@ actor OrchestratorService {
         // Build prompt with conversation history (terminal mode is stateless per invocation)
         let terminalPrompt = buildTerminalPrompt(content, excludingId: responseMessage.id)
 
-        // Build arguments for Claude CLI in print mode
-        let arguments = [
+        // Build arguments for Claude CLI in print mode with session resume support
+        var arguments = [
             "--dangerously-skip-permissions",
-            "--output-format", "text",
+            "--output-format", "stream-json",
+            "--verbose",
             "--system-prompt", systemPrompt,
             "-p", terminalPrompt
         ]
+
+        // Resume previous session if we have a session ID
+        if let sessionId = lastSessionId, !sessionId.isEmpty {
+            arguments.append(contentsOf: ["--resume", sessionId])
+        }
 
         // Debug logging to file
         let logFile = "/tmp/xroads_orchestrator.log"
@@ -708,6 +728,7 @@ actor OrchestratorService {
         do {
             // AsyncStream channel for output chunks — eliminates data race on responseContent
             let (stream, continuation) = AsyncStream.makeStream(of: String.self)
+            let jsonBuffer = JSONLineBuffer()
 
             let processId = try await processRunner.launch(
                 executable: claudePath,
@@ -723,12 +744,52 @@ actor OrchestratorService {
             Log.orchestrator.info("Process launched with ID: \(processId)")
 
             // Single consumer task drains chunks sequentially — no concurrent mutation.
-            // This task is always awaited before the method returns, so self stays alive.
+            // Parses stream-json events to extract text and session IDs.
             let consumerTask = Task {
                 for await chunk in stream {
-                    responseContent += chunk
-                    await self.delegate?.orchestratorDidReceiveChunk(self, chunk: chunk)
-                    self.updateMessage(id: responseMessage.id, content: responseContent)
+                    let events = jsonBuffer.append(chunk)
+                    for event in events {
+                        guard let type = event["type"] as? String else { continue }
+                        switch type {
+                        case "assistant":
+                            // Extract text content blocks from assistant messages
+                            if let message = event["message"] as? [String: Any],
+                               let content = message["content"] as? [[String: Any]] {
+                                for block in content {
+                                    if let text = block["text"] as? String {
+                                        responseContent += text
+                                        await self.delegate?.orchestratorDidReceiveChunk(self, chunk: text)
+                                        self.updateMessage(id: responseMessage.id, content: responseContent)
+                                    }
+                                }
+                            }
+                        case "content_block_delta":
+                            // Streaming text delta
+                            if let delta = event["delta"] as? [String: Any],
+                               let text = delta["text"] as? String {
+                                responseContent += text
+                                await self.delegate?.orchestratorDidReceiveChunk(self, chunk: text)
+                                self.updateMessage(id: responseMessage.id, content: responseContent)
+                            }
+                        case "result", "system":
+                            // Capture session_id for future resume
+                            if let sessionId = event["session_id"] as? String, !sessionId.isEmpty {
+                                self.lastSessionId = sessionId
+                                Log.orchestrator.info("Captured session_id for resume: \(sessionId)")
+                            }
+                        default:
+                            break
+                        }
+                    }
+                    // Fallback: if no JSON events parsed, treat as raw text (graceful degradation)
+                    if events.isEmpty && !chunk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.hasPrefix("{") {
+                            responseContent += chunk
+                            await self.delegate?.orchestratorDidReceiveChunk(self, chunk: chunk)
+                            self.updateMessage(id: responseMessage.id, content: responseContent)
+                        }
+                    }
                 }
             }
 

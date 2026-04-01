@@ -1160,6 +1160,10 @@ private struct LifecycleModifier: ViewModifier {
                 }
                 startEventStream()
             }
+            .task {
+                // Check for orphan processes and stale sessions at startup
+                await appState.checkStartupRecovery()
+            }
             .onChange(of: pendingPRDURL) { _, newURL in
                 if newURL != nil {
                     showPRDLoaderSheet = true

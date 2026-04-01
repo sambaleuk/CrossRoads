@@ -313,6 +313,71 @@ final class AppState {
         }
     }
 
+    // MARK: - Startup Recovery (Orphan Process Detection)
+
+    /// Number of orphan agent processes found at startup
+    var orphanAgentCount: Int = 0
+
+    /// Detected orphan agents from previous crashed session
+    var detectedOrphans: [OrphanAgent] = []
+
+    /// Check for orphan processes and stale sessions at startup.
+    /// Called from the LifecycleModifier when the main window appears.
+    func checkStartupRecovery() async {
+        let detector = OrphanProcessDetector()
+        let orphans = await detector.detectOrphans()
+
+        if !orphans.isEmpty {
+            detectedOrphans = orphans
+            orphanAgentCount = orphans.count
+
+            addLog(LogEntry(
+                level: .warn,
+                source: "system",
+                worktree: nil,
+                message: "Found \(orphans.count) orphan agent(s) from previous session"
+            ))
+
+            // Match orphans to existing terminal slots
+            let matches = await detector.matchToSlots(
+                orphans: orphans,
+                terminalSlots: terminalSlots
+            )
+
+            for (orphan, slotNumber) in matches {
+                if let slot = slotNumber {
+                    addLog(LogEntry(
+                        level: .info,
+                        source: "system",
+                        worktree: orphan.worktreePath,
+                        message: "Orphan \(orphan.agentType) (pid \(orphan.pid)) matches slot \(slot)"
+                    ))
+                } else {
+                    addLog(LogEntry(
+                        level: .info,
+                        source: "system",
+                        worktree: orphan.worktreePath,
+                        message: "Orphan \(orphan.agentType) (pid \(orphan.pid)) — no matching slot"
+                    ))
+                }
+            }
+        }
+
+        // Also check for stale "active" sessions in the orchestration recovery service
+        if let path = projectPath {
+            let recoveryService = OrchestrationRecoveryService()
+            let repoURL = URL(fileURLWithPath: path)
+            if let recovered = await recoveryService.checkForRecovery(repoPath: repoURL) {
+                addLog(LogEntry(
+                    level: .warn,
+                    source: "system",
+                    worktree: nil,
+                    message: "Found interrupted orchestration: \(recovered.prdName) — \(recovered.completedStories)/\(recovered.totalStories) stories done"
+                ))
+            }
+        }
+    }
+
     // MARK: - Delegating Properties (backward compatibility)
     // These forward to sub-states so existing view code continues to work.
     // Views should migrate to appState.dashboard.*, appState.dispatch.*, appState.orchestration.* over time.
