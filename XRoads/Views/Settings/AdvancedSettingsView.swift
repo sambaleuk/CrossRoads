@@ -6,8 +6,9 @@ import SwiftUI
 public struct AdvancedSettingsView: View {
 
     // Cockpit Brain
-    @AppStorage("brainCycleDelaySeconds") private var brainCycleDelay = 5
+    @AppStorage("brainCycleDelaySeconds") private var brainCycleDelay = 60
     @AppStorage("brainMaxCrashRestarts") private var brainMaxCrashRestarts = 3
+    @AppStorage("brainMaxTurns") private var brainMaxTurns = 30
     @AppStorage("brainEnabled") private var brainEnabled = true
 
     // Heartbeat
@@ -51,19 +52,22 @@ public struct AdvancedSettingsView: View {
                 .foregroundStyle(Color.textPrimary)
 
             if brainEnabled {
-                Picker("Monitoring Cycle Delay", selection: $brainCycleDelay) {
-                    Text("2s (aggressive)").tag(2)
-                    Text("5s (default)").tag(5)
-                    Text("10s (relaxed)").tag(10)
-                    Text("30s (minimal)").tag(30)
-                    Text("60s (lazy)").tag(60)
+                Picker("Cycle Delay (between scans)", selection: $brainCycleDelay) {
+                    Text("10s (aggressive)").tag(10)
+                    Text("30s (balanced)").tag(30)
+                    Text("60s (default)").tag(60)
+                    Text("120s (relaxed)").tag(120)
+                    Text("300s (minimal)").tag(300)
                 }
                 .foregroundStyle(Color.textPrimary)
+
+                Stepper("Max Turns per Scan: \(brainMaxTurns)", value: $brainMaxTurns, in: 5...100, step: 5)
+                    .foregroundStyle(Color.textPrimary)
 
                 Stepper("Max Crash Restarts: \(brainMaxCrashRestarts)", value: $brainMaxCrashRestarts, in: 1...10)
                     .foregroundStyle(Color.textPrimary)
 
-                Text("Brain scans the project, reports status, then restarts after \(brainCycleDelay)s. Crash restarts are limited to \(brainMaxCrashRestarts) attempts.")
+                Text("Each scan uses up to \(brainMaxTurns) tool calls (git, file reads, etc). Between scans: \(brainCycleDelay)s pause. Crash recovery: \(brainMaxCrashRestarts) attempts.")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Color.textTertiary)
             }
@@ -243,8 +247,9 @@ public struct AdvancedSettingsView: View {
     }
 
     private func resetAdvancedToDefaults() {
-        brainCycleDelay = 5
+        brainCycleDelay = 60
         brainMaxCrashRestarts = 3
+        brainMaxTurns = 30
         brainEnabled = true
         heartbeatIntervalMs = 30000
         maxFailures = 5

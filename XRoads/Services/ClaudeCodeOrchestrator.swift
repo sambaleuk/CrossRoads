@@ -298,6 +298,13 @@ actor ClaudeCodeOrchestrator {
             "--verbose"
         ]
 
+        // Cockpit brain (slotIndex -1) gets more turns to do a thorough scan
+        // Dev slots get unlimited turns (they work until stories are done)
+        if slotIndex == -1 {
+            let maxTurns = UserDefaults.standard.object(forKey: "brainMaxTurns") as? Int ?? 30
+            arguments.append(contentsOf: ["--max-turns", String(maxTurns)])
+        }
+
         // Resume support: use --resume if we have a previous session ID
         if let sessionId, !sessionId.isEmpty {
             arguments.append(contentsOf: ["--resume", sessionId])
