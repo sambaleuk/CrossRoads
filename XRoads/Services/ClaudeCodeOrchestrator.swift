@@ -697,58 +697,33 @@ actor ClaudeCodeOrchestrator {
     ) async throws -> HeadlessSession {
         let projectName = cop?.projectName ?? URL(fileURLWithPath: projectPath).lastPathComponent
 
-        // Build the context prompt — PROACTIVE, not passive
-        let domainInfo = cop.map { "Domain: \($0.domain), Type: \($0.projectType)" } ?? ""
+        // Build the context prompt — LIVE STATE only. Identity comes from soul.md in the agent definition.
+        let domainInfo = cop.map { "\($0.domain) / \($0.projectType)" } ?? "general"
 
-        var slotSection = ""
+        var slotLines = ""
         if !activeSlots.isEmpty {
-            let slotLines = activeSlots.map { slot -> String in
+            slotLines = activeSlots.map { slot -> String in
                 let branch = slot.branchName ?? "unassigned"
                 let task = slot.currentTask ?? "no task"
                 let worktree = slot.worktreePath ?? "unknown"
-                return "- Slot \(slot.slotIndex + 1) (\(slot.agentType)): \(task)\n  Branch: \(branch)\n  Worktree: \(worktree)"
-            }
-            slotSection = """
-            \(activeSlots.count) dev agents are running:
-            \(slotLines.joined(separator: "\n"))
-
-            DO THIS NOW — no waiting, no asking:
-            1. For EACH worktree: `git -C {path} log --oneline -3` and `git -C {path} diff --stat`
-            2. Read prd.json if it exists — check story statuses
-            3. [CHAT] one-line per slot with concrete progress (commits, files changed, stories done)
-            4. If any slot is stalled (0 changes): [CHAT] Slot N stalled — consider restarting
-            5. If all stories done: [CHAT] All done — ready for merge
-            6. If you see missing tests or quality issues: launch a review slot with [LAUNCH:claude:review:Review code quality]
-            """
-        } else {
-            slotSection = """
-            No dev agents running. You must take initiative NOW:
-            1. Scan the project: `ls`, `find . -name "*.py" -o -name "*.tsx" | head -20`, read README.md
-            2. Check for prd.json or prd-*.json anywhere: `find . -name "prd*.json" -maxdepth 3`
-            3. Analyze what you find and DECIDE what to do:
-               - PRD found? → [CHAT] Found PRD with N stories. Launching agents.
-                 Then: [LAUNCH:claude:backend:Implement stories US-001 to US-003]
-               - No PRD but issues found? → [CHAT] No PRD but found: {issues}. Launching analysis.
-                 Then: [LAUNCH:claude:review:Analyze codebase and produce improvement report]
-               - Clean project, nothing to do? → [CHAT] Project looks good. No action needed.
-            4. If you detect missing tests: [LAUNCH:gemini:testing:Write tests for existing code]
-            5. If you detect outdated deps: [CHAT] Dependencies are outdated: {details}
-
-            DO NOT say "Ready for instructions." YOU are the instructions. Act now.
-            """
+                return "  Slot \(slot.slotIndex + 1) (\(slot.agentType)) [\(slot.status.rawValue)]: \(task)\n    Branch: \(branch)\n    Worktree: \(worktree)"
+            }.joined(separator: "\n")
         }
 
         let contextPrompt = """
-        You are the cockpit brain for '\(projectName)' at \(projectPath). \(domainInfo)
+        Project: \(projectName) at \(projectPath)
+        Domain: \(domainInfo)
+        \(activeSlots.isEmpty ? "No agents running." : "\(activeSlots.count) agents active:\n\(slotLines)")
 
-        \(slotSection)
+        You are a living component of XRoads — not a tool, not a feature. You are the brain.
+        You run in full autonomy with --dangerously-skip-permissions and --add-dir on the parent directory.
+        You have 6 agent slots you can fill using [LAUNCH:agent:role:task].
+        You talk to the operator via [CHAT].
 
-        RULES:
-        - [CHAT] sends a message to the operator. Use it for every significant observation.
-        - [LAUNCH:agent:role:task] creates a new agent slot. Use it when work needs doing.
-        - [STATUS] / [ALERT] / [REPORT] go to the Brain tab.
-        - DO NOT ask for permission. DO NOT say "ready for instructions." ACT.
-        - Think fast, act decisively, report concisely.
+        Your agent definition (cockpit-brain.md) contains your full soul — your identity, your protocols, your arsenal.
+        Read it if this is your first cycle. Then act on what you see.
+
+        This is cycle start. Observe the project state and act accordingly.
         """
 
         // Use slotIndex -1 to distinguish cockpit brain from dev slots
