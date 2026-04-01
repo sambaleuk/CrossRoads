@@ -650,43 +650,45 @@ final class CockpitViewModel {
             logger.info("Cockpit brain exited normally")
         }
 
-        // Auto-restart if session is still active (brain should always be running)
-        guard let session, session.status == .active,
-              brainRestartCount < Self.maxBrainRestarts else {
-            if brainRestartCount >= Self.maxBrainRestarts {
-                logger.error("Brain restart limit reached (\(Self.maxBrainRestarts)) — not restarting")
+        // Auto-restart only if session is still active
+        guard let session, session.status == .active else { return }
+
+        if exitCode != 0 {
+            // Crash recovery: limited restarts
+            guard brainRestartCount < Self.maxBrainRestarts else {
+                logger.error("Brain crash restart limit reached (\(Self.maxBrainRestarts))")
                 NotificationCenter.default.post(
                     name: .cockpitBrainOutput,
                     object: nil,
-                    userInfo: [
-                        "type": "error",
-                        "content": "Brain restart limit reached. Manual restart required.",
-                        "timestamp": Date()
-                    ]
+                    userInfo: ["type": "error", "content": "Brain crash limit reached. Manual restart required.", "timestamp": Date()]
                 )
+                return
             }
-            return
-        }
-
-        self.brainRestartCount += 1
-        let attempt = self.brainRestartCount
-        logger.info("Auto-restarting cockpit brain (attempt \(attempt)/\(Self.maxBrainRestarts))...")
-
-        NotificationCenter.default.post(
-            name: .cockpitBrainOutput,
-            object: nil,
-            userInfo: [
-                "type": "decision",
-                "content": "Brain restarting (attempt \(attempt)/\(Self.maxBrainRestarts))...",
-                "timestamp": Date()
-            ]
-        )
-
-        // Delay slightly to avoid rapid crash loops
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
-            if let projectPath = session.projectPath as String? {
-                await startCockpitBrain(projectPath: projectPath)
+            self.brainRestartCount += 1
+            let attempt = self.brainRestartCount
+            logger.info("Brain crashed — restarting (attempt \(attempt)/\(Self.maxBrainRestarts))...")
+            NotificationCenter.default.post(
+                name: .cockpitBrainOutput,
+                object: nil,
+                userInfo: ["type": "decision", "content": "Brain crash restart (\(attempt)/\(Self.maxBrainRestarts))...", "timestamp": Date()]
+            )
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                await startCockpitBrain(projectPath: session.projectPath)
+            }
+        } else {
+            // Normal cycle: brain finished its scan, restart to continue monitoring (unlimited)
+            self.brainRestartCount = 0  // Reset crash counter on normal exit
+            logger.info("Brain cycle complete — restarting in 5s for next monitoring cycle")
+            NotificationCenter.default.post(
+                name: .cockpitBrainOutput,
+                object: nil,
+                userInfo: ["type": "loop", "content": "Monitoring cycle complete. Restarting...", "timestamp": Date()]
+            )
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(5))
+                guard self.session?.status == .active else { return }
+                await startCockpitBrain(projectPath: session.projectPath)
             }
         }
     }
