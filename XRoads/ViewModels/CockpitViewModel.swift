@@ -371,6 +371,7 @@ final class CockpitViewModel {
 
         // PRD-S09: Stop cockpit brain before closing session
         await stopCockpitBrain()
+        brainHasAnnounced = false
 
         // Capture slots before clearing for post-session intelligence wiring
         let closedSlots = slots
@@ -504,14 +505,21 @@ final class CockpitViewModel {
             NotificationCenter.default.post(name: .cockpitBrainStarted, object: nil)
             logger.info("Cockpit brain started successfully")
 
-            // Announce to chat
-            let slotCount = slots.count
-            let suiteName = session?.suite.name ?? "Developer"
-            NotificationCenter.default.post(
-                name: .cockpitBrainToChat,
-                object: nil,
-                userInfo: ["content": "Cockpit brain online. Suite: \(suiteName). Monitoring \(slotCount) slots. I'll keep you posted."]
-            )
+            // Announce to chat only on first start (not cycle restarts)
+            if !brainHasAnnounced {
+                brainHasAnnounced = true
+                let slotCount = slots.count
+                let suiteName = session?.suite.name ?? "Developer"
+                let runningSlots = slots.filter { $0.status == .running }
+                let slotDetail = runningSlots.isEmpty
+                    ? "No agents running yet."
+                    : runningSlots.map { "Slot \($0.slotIndex + 1) (\($0.agentType))" }.joined(separator: ", ")
+                NotificationCenter.default.post(
+                    name: .cockpitBrainToChat,
+                    object: nil,
+                    userInfo: ["content": "Cockpit brain online. Suite: \(suiteName). \(slotDetail)"]
+                )
+            }
         } catch {
             // Non-fatal: cockpit works without brain session
             logger.error("Cockpit brain launch failed: \(error.localizedDescription)")
@@ -631,6 +639,8 @@ final class CockpitViewModel {
     /// Handles cockpit brain process termination.
     /// Tracks consecutive brain crash restarts to prevent infinite crash loops
     private var brainRestartCount = 0
+    /// Whether brain has already announced itself to chat (prevents spam on cycle restarts)
+    private var brainHasAnnounced = false
 
     /// Read brain settings from UserDefaults (configurable in Settings > Advanced)
     private var brainCycleDelay: Int {
