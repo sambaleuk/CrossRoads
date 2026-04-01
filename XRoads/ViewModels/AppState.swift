@@ -191,13 +191,33 @@ final class AppState {
                     self.handleSlotTermination(slotNumber: slotNumber, exitCode: exitCode)
 
                     // Log termination to MCP panel
-                    let status = exitCode == 0 ? "completed" : "error (code \(exitCode))"
+                    let status = exitCode == 0 ? "completed" : "failed (code \(exitCode))"
+                    let task = self.cockpitViewModel?.slots.first(where: { $0.slotIndex == slotNumber - 1 })?.currentTask ?? ""
                     self.addLog(LogEntry(
                         level: exitCode == 0 ? .info : .error,
                         source: "cockpit",
                         worktree: nil,
-                        message: "Slot \(slotNumber) agent \(status)"
+                        message: "Slot \(slotNumber) \(status): \(task)"
                     ))
+
+                    // Inject into chat
+                    NotificationCenter.default.post(
+                        name: .cockpitBrainToChat,
+                        object: nil,
+                        userInfo: ["content": "Slot \(slotNumber) \(status)\(task.isEmpty ? "" : ": \(task)")"]
+                    )
+
+                    // Persist to chat history
+                    if let repo = self.cockpitViewModel?.chatHistoryRepo,
+                       let sessionId = self.cockpitViewModel?.session?.id {
+                        let entry = ChatHistoryEntry(
+                            sessionId: sessionId,
+                            role: "system",
+                            content: "Slot \(slotNumber) \(status): \(task)",
+                            mode: "event"
+                        )
+                        Task { try? await repo.saveMessage(entry) }
+                    }
                 }
 
                 // Listen for cockpit slot launches → sync to dashboard + log
@@ -239,6 +259,26 @@ final class AppState {
                         worktree: worktreePath,
                         message: "🚀 Slot \(slotNumber) launched: \(agentTypeStr) → \(branchName)"
                     ))
+
+                    // Inject into chat so orchestrator and brain both know
+                    let task = self.cockpitViewModel?.slots.first(where: { $0.slotIndex == slotIndex })?.currentTask ?? "assigned work"
+                    NotificationCenter.default.post(
+                        name: .cockpitBrainToChat,
+                        object: nil,
+                        userInfo: ["content": "Slot \(slotNumber) (\(agentTypeStr)) launched on branch `\(branchName)` — \(task)"]
+                    )
+
+                    // Persist to chat history so brain sees it at next cycle
+                    if let repo = self.cockpitViewModel?.chatHistoryRepo,
+                       let sessionId = self.cockpitViewModel?.session?.id {
+                        let entry = ChatHistoryEntry(
+                            sessionId: sessionId,
+                            role: "system",
+                            content: "Slot \(slotNumber) (\(agentTypeStr)) launched: \(task) on \(branchName)",
+                            mode: "event"
+                        )
+                        Task { try? await repo.saveMessage(entry) }
+                    }
                 }
 
                 // PRD-S09: Listen for cockpit brain output → route to MCP logs
