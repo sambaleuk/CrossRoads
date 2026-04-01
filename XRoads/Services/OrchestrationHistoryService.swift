@@ -12,6 +12,8 @@ actor OrchestrationHistoryService {
         self.directory = directory
         self.fileURL = directory.appendingPathComponent("orchestrations.json")
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .iso8601
     }
 
     func load() async -> [OrchestrationRecord] {
