@@ -639,6 +639,7 @@ actor ClaudeCodeOrchestrator {
         let metaMonitorContent = """
         ---
         name: meta-monitor
+        whenToUse: "When dev agents are running and you need to check code quality, run tests, or detect conflicts"
         description: "Code quality monitor — watches dev worktrees, runs tests, detects conflicts"
         tools:
           - Read
@@ -674,6 +675,7 @@ actor ClaudeCodeOrchestrator {
         let transverseContent = """
         ---
         name: transverse-producer
+        whenToUse: "When you need to produce non-code deliverables like documentation, strategy documents, or marketing copy"
         description: "Produces non-code deliverables — documentation, strategy, marketing copy"
         tools:
           - Read
@@ -708,6 +710,7 @@ actor ClaudeCodeOrchestrator {
         let scannerContent = """
         ---
         name: scanner
+        whenToUse: "When you need to observe the current project state — worktrees, git status, PRDs, file structure"
         description: "Project state observer — scans worktrees, git status, PRDs, and reports changes"
         tools:
           - Read
@@ -753,6 +756,7 @@ actor ClaudeCodeOrchestrator {
         let commanderContent = """
         ---
         name: commander
+        whenToUse: "When you need to decide which agent slots to launch and what tasks to assign them"
         description: "Slot commander — decides which agents to launch and manages the execution fleet"
         tools:
           - Read
@@ -791,6 +795,7 @@ actor ClaudeCodeOrchestrator {
         let advisorContent = """
         ---
         name: advisor
+        whenToUse: "When you need strategic recommendations about what to do next with the project"
         description: "Strategic advisor — analyzes scanner output and recommends actions to the operator"
         tools:
           - Read
