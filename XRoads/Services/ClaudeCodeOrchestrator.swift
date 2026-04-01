@@ -800,6 +800,28 @@ actor ClaudeCodeOrchestrator {
                 guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
+                // Check for slot launch request: [LAUNCH:agent:role:task:branch]
+                // Brain decides to launch a new slot
+                if trimmed.hasPrefix("[LAUNCH:") && trimmed.contains("]") {
+                    let payload = String(trimmed.dropFirst(8).prefix(while: { $0 != "]" }))
+                    let parts = payload.components(separatedBy: ":")
+                    if parts.count >= 3 {
+                        let agent = parts[0].trimmingCharacters(in: .whitespaces)
+                        let role = parts[1].trimmingCharacters(in: .whitespaces)
+                        let task = parts[2...].joined(separator: ":").trimmingCharacters(in: .whitespaces)
+                        NotificationCenter.default.post(
+                            name: .brainRequestsSlotLaunch,
+                            object: nil,
+                            userInfo: [
+                                "agentType": agent,
+                                "role": role,
+                                "task": task,
+                            ]
+                        )
+                        return (type: "decision", content: "Launching slot: \(agent) as \(role) — \(task)")
+                    }
+                }
+
                 // Check for chat message: [CHAT] message → posts to chat panel
                 if trimmed.hasPrefix("[CHAT]") {
                     let msg = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)

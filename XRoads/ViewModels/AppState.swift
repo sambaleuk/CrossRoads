@@ -306,6 +306,31 @@ final class AppState {
                     }
                 }
 
+                // Listen for brain slot launch requests
+                NotificationCenter.default.addObserver(
+                    forName: .brainRequestsSlotLaunch,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let agentType = info["agentType"] as? String,
+                          let role = info["role"] as? String,
+                          let task = info["task"] as? String,
+                          let cockpitVM = self.cockpitViewModel,
+                          let projectPath = self.projectPath
+                    else { return }
+
+                    self.addLog(LogEntry(level: .info, source: "brain", worktree: nil,
+                        message: "Brain requests slot: \(agentType) as \(role) — \(task)"))
+
+                    Task { @MainActor in
+                        await cockpitVM.launchSlotFromBrain(
+                            agentType: agentType, role: role, task: task, projectPath: projectPath
+                        )
+                    }
+                }
+
                 await vm.activate(projectPath: path, suiteId: self.activeSuiteId)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")

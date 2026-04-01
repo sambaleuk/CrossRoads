@@ -81,4 +81,8 @@ extension Notification.Name {
     /// Posted when the cockpit brain wants to send a message to the chat panel.
     /// UserInfo: "content" (String), "role" (String: "system" or "assistant")
     static let cockpitBrainToChat = Notification.Name("cockpitBrainToChat")
+
+    /// Posted when the brain requests a slot launch.
+    /// UserInfo: "agentType" (String), "role" (String), "task" (String)
+    static let brainRequestsSlotLaunch = Notification.Name("brainRequestsSlotLaunch")
 }

@@ -1339,6 +1339,43 @@ final class CockpitViewModel {
         // Brain will detect the new slots at its next cycle and report via [CHAT]
     }
 
+    // MARK: - Brain-Initiated Slot Launch
+
+    /// Called when the brain requests a slot launch via [LAUNCH:agent:role:task]
+    func launchSlotFromBrain(agentType: String, role: String, task: String, projectPath: String) async {
+        guard let session else {
+            logger.warning("Cannot launch slot — no active session")
+            return
+        }
+
+        // Find next available slot index
+        let usedIndices = Set(slots.map { $0.slotIndex })
+        let nextIndex = (0..<6).first(where: { !usedIndices.contains($0) }) ?? slots.count
+
+        let branchName = "xroads/slot-\(nextIndex + 1)-\(role.lowercased().replacingOccurrences(of: " ", with: "-"))"
+
+        // Create the slot in DB
+        var slot = AgentSlot(
+            cockpitSessionId: session.id,
+            slotIndex: nextIndex,
+            status: .empty,
+            agentType: agentType,
+            branchName: branchName
+        )
+        slot.currentTask = task
+
+        do {
+            let created = try await repository.createSlot(slot)
+            slots.append(created)
+            logger.info("Brain created slot \(nextIndex): \(agentType) as \(role)")
+
+            // Launch it
+            await autoLaunchAssignedSlots([created], projectPath: projectPath)
+        } catch {
+            logger.error("Failed to create slot from brain request: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Role-Based Prompting
 
     /// Maps a slot's branch/task to role-specific instructions.
