@@ -19,19 +19,19 @@ struct CockpitModeView: View {
 
             Divider()
 
-            // Main content: Brain (always visible) is the cockpit
-            VStack(spacing: 0) {
-                // Brain panel — the consciousness stream, takes all available space
-                CockpitBrainPanelView(
-                    cop: viewModel.cockpitPlan,
-                    adaptationActions: viewModel.adaptationActions
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Main content: Brain (top half) + Chairman (bottom half)
+            GeometryReader { geo in
+                VStack(spacing: 0) {
+                    // Brain panel — consciousness stream (top half)
+                    CockpitBrainPanelView(
+                        cop: viewModel.cockpitPlan,
+                        adaptationActions: viewModel.adaptationActions
+                    )
+                    .frame(height: geo.size.height * 0.55)
 
-                // Compact panels below
-                if viewModel.chairmanBrief != nil || viewModel.budgetStatus != nil || !viewModel.heartbeatResults.isEmpty {
                     Divider()
 
+                    // Chairman + compact panels (bottom half, scrollable)
                     ScrollView {
                         VStack(spacing: 0) {
                             ChairmanFeedPanelView(chairmanBrief: viewModel.chairmanBrief)
@@ -51,7 +51,7 @@ struct CockpitModeView: View {
                         }
                         .padding(Theme.Spacing.sm)
                     }
-                    .frame(maxHeight: 180)
+                    .frame(height: geo.size.height * 0.45)
                 }
             }
         }
