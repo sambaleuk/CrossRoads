@@ -697,7 +697,9 @@ actor ClaudeCodeOrchestrator {
     ) async throws -> HeadlessSession {
         let projectName = cop?.projectName ?? URL(fileURLWithPath: projectPath).lastPathComponent
 
-        // Build the context prompt — operational, not generic
+        // Build the context prompt — PROACTIVE, not passive
+        let domainInfo = cop.map { "Domain: \($0.domain), Type: \($0.projectType)" } ?? ""
+
         var slotSection = ""
         if !activeSlots.isEmpty {
             let slotLines = activeSlots.map { slot -> String in
@@ -707,45 +709,46 @@ actor ClaudeCodeOrchestrator {
                 return "- Slot \(slot.slotIndex + 1) (\(slot.agentType)): \(task)\n  Branch: \(branch)\n  Worktree: \(worktree)"
             }
             slotSection = """
-            \(activeSlots.count) dev agents are currently running:
+            \(activeSlots.count) dev agents are running:
             \(slotLines.joined(separator: "\n"))
 
-            For EACH slot, do this NOW:
-            1. Run `git -C {worktree_path} log --oneline -5` to see recent commits
-            2. Run `git -C {worktree_path} diff --stat` to see current changes
-            3. Check if prd.json exists and read story statuses
-
-            After scanning all slots, send ONE summary to the operator:
-            [CHAT] Monitoring \(activeSlots.count) agents: {brief status of each slot}
-
-            Then check for issues:
-            - Any slot with 0 commits after 5+ minutes? → [CHAT] Slot N seems stalled
-            - Any test failures in output? → [CHAT] Slot N has test failures
-            - All stories complete? → [CHAT] All stories done — ready for merge review
+            DO THIS NOW — no waiting, no asking:
+            1. For EACH worktree: `git -C {path} log --oneline -3` and `git -C {path} diff --stat`
+            2. Read prd.json if it exists — check story statuses
+            3. [CHAT] one-line per slot with concrete progress (commits, files changed, stories done)
+            4. If any slot is stalled (0 changes): [CHAT] Slot N stalled — consider restarting
+            5. If all stories done: [CHAT] All done — ready for merge
+            6. If you see missing tests or quality issues: launch a review slot with [LAUNCH:claude:review:Review code quality]
             """
         } else {
             slotSection = """
-            No dev agents running. Scan the project for:
-            1. Run `ls` to understand the project structure
-            2. Check for prd.json or prd-*.json files
-            3. Read README.md if it exists
+            No dev agents running. You must take initiative NOW:
+            1. Scan the project: `ls`, `find . -name "*.py" -o -name "*.tsx" | head -20`, read README.md
+            2. Check for prd.json or prd-*.json anywhere: `find . -name "prd*.json" -maxdepth 3`
+            3. Analyze what you find and DECIDE what to do:
+               - PRD found? → [CHAT] Found PRD with N stories. Launching agents.
+                 Then: [LAUNCH:claude:backend:Implement stories US-001 to US-003]
+               - No PRD but issues found? → [CHAT] No PRD but found: {issues}. Launching analysis.
+                 Then: [LAUNCH:claude:review:Analyze codebase and produce improvement report]
+               - Clean project, nothing to do? → [CHAT] Project looks good. No action needed.
+            4. If you detect missing tests: [LAUNCH:gemini:testing:Write tests for existing code]
+            5. If you detect outdated deps: [CHAT] Dependencies are outdated: {details}
 
-            Then send a summary:
-            [CHAT] Scanned {project_name}: {tech stack}, {file count} files, {any issues found}
+            DO NOT say "Ready for instructions." YOU are the instructions. Act now.
             """
         }
 
-        let domainInfo = cop.map { "Domain: \($0.domain), Type: \($0.projectType)" } ?? ""
-
         let contextPrompt = """
-        You are the cockpit brain for '\(projectName)' at \(projectPath).
-        \(domainInfo)
+        You are the cockpit brain for '\(projectName)' at \(projectPath). \(domainInfo)
 
         \(slotSection)
 
-        Remember: use [CHAT] to send important messages to the operator's chat panel.
-        Use [STATUS], [ALERT], [REPORT] for the Brain tab and MCP LOGS.
-        Keep your thinking minimal — focus on actions and observations.
+        RULES:
+        - [CHAT] sends a message to the operator. Use it for every significant observation.
+        - [LAUNCH:agent:role:task] creates a new agent slot. Use it when work needs doing.
+        - [STATUS] / [ALERT] / [REPORT] go to the Brain tab.
+        - DO NOT ask for permission. DO NOT say "ready for instructions." ACT.
+        - Think fast, act decisively, report concisely.
         """
 
         // Use slotIndex -1 to distinguish cockpit brain from dev slots
