@@ -86,11 +86,11 @@ struct CockpitBrainPanelView: View {
     private var headerView: some View {
         HStack(spacing: 6) {
             Image(systemName: "brain.head.profile")
-                .font(.system(size: 10))
+                .font(.system(size: 12))
                 .foregroundStyle(Color.terminalCyan)
 
             Text("BRAIN")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(Color.textPrimary)
 
             // Status dot: green = alive, gray = stopped
@@ -100,14 +100,14 @@ struct CockpitBrainPanelView: View {
                 .shadow(color: isAlive ? Color.statusSuccess.opacity(0.6) : .clear, radius: 2)
 
             Text(isAlive ? "consciousness stream" : "offline")
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Color.textTertiary)
 
             Spacer()
 
             if !entries.isEmpty {
                 Text("\(entries.count)")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color.textTertiary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
@@ -178,7 +178,7 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Text(entry.content)
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .italic()
                 .foregroundStyle(Color.textTertiary)
                 .lineLimit(3)
@@ -197,12 +197,12 @@ struct CockpitBrainPanelView: View {
             let detail = parts.count > 1 ? String(parts[1]) : ""
 
             Text("[\(toolName)]")
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(Color.statusInfo)
 
             if !detail.isEmpty {
                 Text(detail)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1)
             }
@@ -220,7 +220,7 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Text(entry.content)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.statusSuccess)
                 .lineLimit(3)
         }
@@ -237,7 +237,7 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Text(entry.content)
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Color.textTertiary.opacity(0.7))
                 .lineLimit(1)
         }
@@ -250,11 +250,11 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Image(systemName: "person.2.fill")
-                .font(.system(size: 7))
+                .font(.system(size: 11))
                 .foregroundStyle(Color.terminalMagenta)
 
             Text(entry.content)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.terminalMagenta)
                 .lineLimit(2)
         }
@@ -267,11 +267,11 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 7))
+                .font(.system(size: 11))
                 .foregroundStyle(Color.statusError)
 
             Text(entry.content)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.statusError)
                 .lineLimit(3)
         }
@@ -288,7 +288,7 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Text(entry.content)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.statusInfo)
                 .lineLimit(3)
         }
@@ -305,11 +305,11 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Image(systemName: "doc.text.fill")
-                .font(.system(size: 7))
+                .font(.system(size: 11))
                 .foregroundStyle(Color.statusWarning)
 
             Text(entry.content)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.textPrimary)
                 .lineLimit(4)
         }
@@ -322,7 +322,7 @@ struct CockpitBrainPanelView: View {
             timestampLabel(entry.timestamp)
 
             Text(entry.content)
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(2)
         }
@@ -332,7 +332,7 @@ struct CockpitBrainPanelView: View {
     /// Timestamp label in [HH:mm:ss] format
     private func timestampLabel(_ date: Date) -> some View {
         Text(formatTime(date))
-            .font(.system(size: 7, design: .monospaced))
+            .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(Color.textTertiary.opacity(0.5))
     }
 
@@ -344,11 +344,11 @@ struct CockpitBrainPanelView: View {
             // Project info
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("PROJECT")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color.textTertiary)
 
                 Text(cop.projectName)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
 
@@ -364,11 +364,11 @@ struct CockpitBrainPanelView: View {
             // Waiting for brain message
             HStack(spacing: 6) {
                 Image(systemName: "brain")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(Color.textTertiary)
 
                 Text("Brain session not started")
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.textTertiary)
             }
 
@@ -378,17 +378,17 @@ struct CockpitBrainPanelView: View {
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("ADAPTATIONS")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color.textTertiary)
 
                     ForEach(Array(adaptationActions.prefix(5).enumerated()), id: \.offset) { _, action in
                         HStack(spacing: 4) {
                             Image(systemName: adaptationIcon(action.action))
-                                .font(.system(size: 7))
+                                .font(.system(size: 11))
                                 .foregroundStyle(adaptationColor(action.action))
 
                             Text(action.action.replacingOccurrences(of: "_", with: " "))
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
                                 .foregroundStyle(Color.textPrimary)
                                 .lineLimit(1)
                         }
@@ -407,10 +407,10 @@ struct CockpitBrainPanelView: View {
                 .font(.system(size: 24))
                 .foregroundStyle(Color.textTertiary.opacity(0.5))
             Text("Brain waiting...")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(Color.textTertiary)
             Text("Open a project to activate the cockpit brain")
-                .font(.system(size: 9))
+                .font(.system(size: 11))
                 .foregroundStyle(Color.textTertiary.opacity(0.6))
             Spacer()
         }
@@ -451,7 +451,7 @@ struct CockpitBrainPanelView: View {
     @ViewBuilder
     private func badgeView(text: String, color: Color) -> some View {
         Text(text.uppercased())
-            .font(.system(size: 7, weight: .bold, design: .monospaced))
+            .font(.system(size: 11, weight: .bold, design: .monospaced))
             .foregroundStyle(color)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
