@@ -218,6 +218,8 @@ final class AppState {
                             mode: "event"
                         )
                         Task { try? await repo.saveMessage(entry) }
+                    // Wake brain to react to slot termination
+                    self.cockpitViewModel?.wakeBrain(reason: "Slot \(slotNumber) \(status)")
                     }
                 }
 
@@ -280,6 +282,9 @@ final class AppState {
                         )
                         Task { try? await repo.saveMessage(entry) }
                     }
+
+                    // Wake brain to see the new slot
+                    self.cockpitViewModel?.wakeBrain(reason: "Slot \(slotNumber) launched")
                 }
 
                 // PRD-S09: Listen for cockpit brain output → route to MCP logs

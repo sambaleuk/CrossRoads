@@ -214,8 +214,9 @@ final class CockpitViewModel {
                     await autoLaunchAssignedSlots(emptySlots, projectPath: projectPath)
                 }
 
-                // Start brain (was missing in recovery path!)
+                // Start brain + safety net
                 await startCockpitBrain(projectPath: projectPath)
+                startBrainSafetyNet()
 
                 isLoading = false
                 logger.info("Recovered session with \(self.slots.count) slots + brain started")
@@ -268,8 +269,9 @@ final class CockpitViewModel {
             startHeartbeatPolling()
             startBudgetPolling()
 
-            // Step 10 (PRD-S09): Launch cockpit brain Claude Code session
+            // Step 10 (PRD-S09): Launch cockpit brain + start safety net timer
             await startCockpitBrain(projectPath: projectPath)
+            startBrainSafetyNet()
 
             // Step 11: Seed initial learning data so Intelligence panel shows content
             if let learningRepo = learningRepo, let sessionId = session?.id {
@@ -376,6 +378,8 @@ final class CockpitViewModel {
 
         // PRD-S09: Stop cockpit brain before closing session
         await stopCockpitBrain()
+        brainSafetyNetTask?.cancel()
+        brainSafetyNetTask = nil
         brainHasAnnounced = false
 
         // Capture slots before clearing for post-session intelligence wiring
@@ -691,18 +695,56 @@ final class CockpitViewModel {
     /// Handles cockpit brain process termination.
     /// Tracks consecutive brain crash restarts to prevent infinite crash loops
     private var brainRestartCount = 0
-    /// Whether brain has already announced itself to chat (prevents spam on cycle restarts)
+    /// Whether brain has already announced itself to chat
     private var brainHasAnnounced = false
+    /// Safety net timer: wake brain periodically even without events
+    private var brainSafetyNetTask: Task<Void, Never>?
 
-    /// Read brain settings from UserDefaults (configurable in Settings > Advanced)
-    private var brainCycleDelay: Int {
-        UserDefaults.standard.object(forKey: "brainCycleDelaySeconds") as? Int ?? 120
-    }
+    /// Read brain settings from UserDefaults
     private var brainMaxCrashRestarts: Int {
         UserDefaults.standard.object(forKey: "brainMaxCrashRestarts") as? Int ?? 3
     }
+    private var brainSafetyNetInterval: Int {
+        // Fallback periodic check when no events fire (safety net only)
+        UserDefaults.standard.object(forKey: "brainCycleDelaySeconds") as? Int ?? 300
+    }
     private var brainEnabled: Bool {
         UserDefaults.standard.object(forKey: "brainEnabled") as? Bool ?? true
+    }
+
+    /// Wake the brain on-demand (event-driven). Called when something happens that
+    /// the brain should know about: slot launched, slot terminated, PRD detected, etc.
+    func wakeBrain(reason: String) {
+        guard brainEnabled,
+              session?.status == .active,
+              cockpitBrainSession == nil,  // not already running
+              let projectPath = session?.projectPath else { return }
+
+        logger.info("Waking brain: \(reason)")
+        NotificationCenter.default.post(
+            name: .cockpitBrainOutput,
+            object: nil,
+            userInfo: ["type": "loop", "content": "Waking: \(reason)", "timestamp": Date()]
+        )
+
+        Task { @MainActor in
+            await startCockpitBrain(projectPath: projectPath)
+        }
+    }
+
+    /// Start the safety net timer — wakes brain periodically as a fallback
+    private func startBrainSafetyNet() {
+        brainSafetyNetTask?.cancel()
+        brainSafetyNetTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(self?.brainSafetyNetInterval ?? 300))
+                guard let self, self.session?.status == .active else { continue }
+                // Only wake if brain is sleeping (not already running)
+                if self.cockpitBrainSession == nil {
+                    self.wakeBrain(reason: "safety net periodic check")
+                }
+            }
+        }
     }
 
     private func handleCockpitBrainTermination(exitCode: Int32) {
@@ -716,29 +758,14 @@ final class CockpitViewModel {
             NotificationCenter.default.post(
                 name: .cockpitBrainOutput,
                 object: nil,
-                userInfo: [
-                    "type": "error",
-                    "content": "Brain process exited with code \(exitCode)",
-                    "timestamp": Date()
-                ]
+                userInfo: ["type": "error", "content": "Brain exited with code \(exitCode)", "timestamp": Date()]
             )
-        } else {
-            logger.info("Cockpit brain exited normally")
-        }
 
-        // Auto-restart only if session is still active
-        guard let session, session.status == .active else { return }
-
-        if exitCode != 0 {
             // Crash recovery: limited restarts
+            guard let session, session.status == .active else { return }
             let maxCrash = self.brainMaxCrashRestarts
             guard brainRestartCount < maxCrash else {
-                logger.error("Brain crash restart limit reached (\(maxCrash))")
-                NotificationCenter.default.post(
-                    name: .cockpitBrainOutput,
-                    object: nil,
-                    userInfo: ["type": "error", "content": "Brain crash limit reached. Manual restart required.", "timestamp": Date()]
-                )
+                logger.error("Brain crash limit reached (\(maxCrash))")
                 return
             }
             self.brainRestartCount += 1
@@ -754,20 +781,17 @@ final class CockpitViewModel {
                 await startCockpitBrain(projectPath: session.projectPath)
             }
         } else {
-            // Normal cycle: brain finished its scan, restart to continue monitoring (unlimited)
-            self.brainRestartCount = 0  // Reset crash counter on normal exit
-            let delay = self.brainCycleDelay
-            logger.info("Brain cycle complete — restarting in \(delay)s for next monitoring cycle")
+            // Normal exit: brain completed its scan. Go to SLEEP.
+            // Brain will be woken by events (slot launch, slot terminate, etc.)
+            // or by the safety net timer.
+            self.brainRestartCount = 0
+            logger.info("Brain cycle complete — sleeping until next event")
             NotificationCenter.default.post(
                 name: .cockpitBrainOutput,
                 object: nil,
-                userInfo: ["type": "loop", "content": "Monitoring cycle complete. Next scan in \(delay)s...", "timestamp": Date()]
+                userInfo: ["type": "loop", "content": "Cycle done. Sleeping until next event.", "timestamp": Date()]
             )
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(delay))
-                guard self.session?.status == .active, self.brainEnabled else { return }
-                await startCockpitBrain(projectPath: session.projectPath)
-            }
+            // No auto-restart — wakeBrain() will be called by events
         }
     }
 

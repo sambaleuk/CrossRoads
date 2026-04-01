@@ -52,12 +52,11 @@ public struct AdvancedSettingsView: View {
                 .foregroundStyle(Color.textPrimary)
 
             if brainEnabled {
-                Picker("Cycle Delay (between scans)", selection: $brainCycleDelay) {
-                    Text("30s (aggressive)").tag(30)
-                    Text("60s (balanced)").tag(60)
-                    Text("2 min (default)").tag(120)
-                    Text("5 min (relaxed)").tag(300)
-                    Text("10 min (minimal)").tag(600)
+                Picker("Safety Net Interval", selection: $brainCycleDelay) {
+                    Text("2 min").tag(120)
+                    Text("5 min (default)").tag(300)
+                    Text("10 min").tag(600)
+                    Text("30 min").tag(1800)
                 }
                 .foregroundStyle(Color.textPrimary)
 
@@ -67,7 +66,7 @@ public struct AdvancedSettingsView: View {
                 Stepper("Max Crash Restarts: \(brainMaxCrashRestarts)", value: $brainMaxCrashRestarts, in: 1...10)
                     .foregroundStyle(Color.textPrimary)
 
-                Text("Each scan uses up to \(brainMaxTurns) tool calls (git, file reads, etc). Between scans: \(brainCycleDelay)s pause. Crash recovery: \(brainMaxCrashRestarts) attempts.")
+                Text("Brain wakes on events (slot launch, slot terminate). Safety net: periodic check every \(brainCycleDelay / 60) min if no events. Each scan: up to \(brainMaxTurns) tool calls.")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(Color.textTertiary)
             }
@@ -247,7 +246,7 @@ public struct AdvancedSettingsView: View {
     }
 
     private func resetAdvancedToDefaults() {
-        brainCycleDelay = 120
+        brainCycleDelay = 300
         brainMaxCrashRestarts = 3
         brainMaxTurns = 30
         brainEnabled = true
