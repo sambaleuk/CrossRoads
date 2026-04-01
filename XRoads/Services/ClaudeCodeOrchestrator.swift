@@ -295,14 +295,18 @@ actor ClaudeCodeOrchestrator {
             "-p", prompt,
             "--agent", agentName,
             "--output-format", "stream-json",
-            "--verbose"
+            "--verbose",
+            "--dangerously-skip-permissions"
         ]
 
-        // Cockpit brain (slotIndex -1) gets more turns to do a thorough scan
-        // Dev slots get unlimited turns (they work until stories are done)
+        // Cockpit brain (slotIndex -1) gets more turns and parent dir access
         if slotIndex == -1 {
             let maxTurns = UserDefaults.standard.object(forKey: "brainMaxTurns") as? Int ?? 30
             arguments.append(contentsOf: ["--max-turns", String(maxTurns)])
+
+            // Allow brain to read worktree directories (siblings of project dir)
+            let parentDir = URL(fileURLWithPath: projectPath).deletingLastPathComponent().path
+            arguments.append(contentsOf: ["--add-dir", parentDir])
         }
 
         // Resume support: use --resume if we have a previous session ID
