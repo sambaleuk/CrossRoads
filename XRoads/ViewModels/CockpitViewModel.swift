@@ -1347,7 +1347,22 @@ final class CockpitViewModel {
             }
         }
 
-        logger.info("Auto-launch complete: \(self.slots.filter { $0.status == .running }.count) agents running")
+        let runningCount = self.slots.filter { $0.status == .running }.count
+        logger.info("Auto-launch complete: \(runningCount) agents running")
+
+        // Notify chat that orchestration is active
+        if runningCount > 0 {
+            let slotDetail = self.slots
+                .filter { $0.status == .running }
+                .map { "Slot \($0.slotIndex + 1) (\($0.agentType)): \($0.currentTask ?? "working")" }
+                .joined(separator: "\n  ")
+
+            NotificationCenter.default.post(
+                name: .cockpitBrainToChat,
+                object: nil,
+                userInfo: ["content": "Orchestration started — \(runningCount) agents launched:\n  \(slotDetail)"]
+            )
+        }
     }
 
     // MARK: - Role-Based Prompting
@@ -1458,6 +1473,15 @@ final class CockpitViewModel {
         // Find the slot by 1-based slotNumber
         let slotIndex = slotNumber - 1
         guard let slot = slots.first(where: { $0.slotIndex == slotIndex }) else { return }
+
+        // Notify chat about slot completion
+        let status = exitCode == 0 ? "completed" : "failed (code \(exitCode))"
+        let task = slot.currentTask ?? "unknown task"
+        NotificationCenter.default.post(
+            name: .cockpitBrainToChat,
+            object: nil,
+            userInfo: ["content": "Slot \(slotNumber) (\(slot.agentType)) \(status): \(task)"]
+        )
 
         let slotCost = slotCosts[slot.id]?.totalCostCents ?? 0
         // Estimate elapsed time: use createdAt delta or a default
