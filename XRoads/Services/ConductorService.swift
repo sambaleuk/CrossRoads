@@ -73,12 +73,8 @@ actor ConductorService {
         // Step 1: Send to cockpit-council Chairman
         let chairmanOutput = try await councilClient.deliberate(input: chairmanInput)
 
-        // Validate Chairman returned at least one assignment
-        guard !chairmanOutput.assignments.isEmpty else {
-            throw ConductorError.noSlotsAssigned
-        }
-
-        logger.info("Chairman decided: \(chairmanOutput.decision)")
+        // Chairman may return 0 assignments — brain decides whether to launch slots
+        logger.info("Chairman analysis: \(chairmanOutput.decision) (\(chairmanOutput.assignments.count) suggested slots)")
 
         // Step 2: Store chairman brief on the session
         var updatedSession = session

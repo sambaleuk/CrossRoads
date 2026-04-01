@@ -89,20 +89,16 @@ actor CockpitLifecycleManager {
             throw CockpitLifecycleError.invalidTransition(from: session.status, event: "slots_assigned")
         }
 
-        // Guard: at_least_one_slot_configured
+        // Slots may be empty — brain decides whether to launch them later
         let configuredSlots = slots.filter { $0.hasSkillAssigned }
-        guard !configuredSlots.isEmpty else {
-            logger.warning("Guard at_least_one_slot_configured failed: no configured slots")
-            throw CockpitLifecycleError.guardViolation(guard: "at_least_one_slot_configured", event: "slots_assigned")
-        }
 
-        // Transition: initializing → active
+        // Transition: initializing → active (even with 0 slots — brain will decide)
         var updated = session
         updated.status = .active
         updated.updatedAt = Date()
         let persisted = try await repository.updateSession(updated)
 
-        logger.info("CockpitSession \(session.id) slots assigned: initializing → active (\(configuredSlots.count) slots)")
+        logger.info("CockpitSession \(session.id) activated: \(configuredSlots.count) slots configured (brain decides the rest)")
 
         return persisted
     }
