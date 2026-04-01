@@ -117,6 +117,10 @@ final class CockpitViewModel {
     let chatHistoryRepo: ChatHistoryRepository?
     private let logger = Logger(subsystem: "com.xroads", category: "CockpitVM")
 
+    /// Closure to get live running slots from the dashboard (AppState.terminalSlots)
+    /// Set by AppState after creating the CockpitViewModel
+    var liveTerminalSlots: (() -> [TerminalSlot])?
+
     /// PRD-S08: Claude Code native orchestrator (lazy-initialized from ptyProcessRunner)
     private var orchestrator: ClaudeCodeOrchestrator?
 
@@ -482,11 +486,32 @@ final class CockpitViewModel {
                 chairmanBrief: session?.chairmanBrief
             )
 
-            // Step 2: Launch cockpit brain session
+            // Step 2: Build combined slot list from cockpit slots + dashboard terminal slots
+            var allActiveSlots = slots
+            if let terminalSlots = liveTerminalSlots?() {
+                for ts in terminalSlots where ts.status == .running {
+                    // Add terminal slots not already in cockpit slots
+                    let alreadyTracked = allActiveSlots.contains(where: { $0.slotIndex == ts.slotNumber - 1 })
+                    if !alreadyTracked {
+                        var syntheticSlot = AgentSlot(
+                            cockpitSessionId: session?.id ?? UUID(),
+                            slotIndex: ts.slotNumber - 1,
+                            status: .running,
+                            agentType: (ts.agentType ?? .claude).rawValue
+                        )
+                        syntheticSlot.branchName = ts.worktree?.branch
+                        syntheticSlot.worktreePath = ts.worktree?.path
+                        syntheticSlot.currentTask = ts.currentTask
+                        allActiveSlots.append(syntheticSlot)
+                    }
+                }
+            }
+
+            // Launch cockpit brain session with ALL active slots
             let brainSession = try await orchestrator.launchCockpitSession(
                 projectPath: projectPath,
                 cop: cockpitPlan,
-                activeSlots: slots,
+                activeSlots: allActiveSlots,
                 onOutput: { [weak self] rawOutput in
                     self?.handleCockpitBrainRawOutput(rawOutput)
                 },

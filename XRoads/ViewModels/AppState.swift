@@ -142,6 +142,7 @@ final class AppState {
                     chatHistoryRepo: chatHistoryRepo
                 )
                 cockpitViewModel = vm
+                vm.liveTerminalSlots = { [weak self] in self?.terminalSlots ?? [] }
 
                 // Load suite-specific skills
                 let activeSuite = Suite.builtIn.first(where: { $0.id == self.activeSuiteId }) ?? .developer
