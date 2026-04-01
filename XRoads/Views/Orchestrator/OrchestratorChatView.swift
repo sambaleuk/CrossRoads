@@ -110,6 +110,30 @@ struct OrchestratorChatView: View {
             // Inject chat history repo from cockpit for DB persistence
             viewModel.chatHistoryRepo = appState.cockpitViewModel?.chatHistoryRepo
             viewModel.cockpitSessionId = appState.cockpitViewModel?.session?.id
+
+            // Restore previous chat messages from DB
+            if let repo = viewModel.chatHistoryRepo,
+               let sessionId = viewModel.cockpitSessionId {
+                if let history = try? await repo.fetchHistory(sessionId: sessionId, limit: 100) {
+                    for entry in history {
+                        let role: ChatRole = entry.role == "user" ? .user : entry.role == "system" ? .system : .assistant
+                        let msg = ChatMessage(role: role, content: entry.content, timestamp: entry.createdAt, status: .complete)
+                        viewModel.messages.append(msg)
+                    }
+                }
+            } else {
+                // No active session — try loading most recent messages
+                if let repo = appState.cockpitViewModel?.chatHistoryRepo {
+                    if let recent = try? await repo.fetchRecent(limit: 50) {
+                        for entry in recent {
+                            let role: ChatRole = entry.role == "user" ? .user : entry.role == "system" ? .system : .assistant
+                            let msg = ChatMessage(role: role, content: entry.content, timestamp: entry.createdAt, status: .complete)
+                            viewModel.messages.append(msg)
+                        }
+                    }
+                }
+            }
+
             await viewModel.loadContext(from: appState)
         }
         .onChange(of: appState.projectPath) { _, newPath in
