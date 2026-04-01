@@ -632,7 +632,7 @@ final class CockpitViewModel {
 
     /// Read brain settings from UserDefaults (configurable in Settings > Advanced)
     private var brainCycleDelay: Int {
-        UserDefaults.standard.object(forKey: "brainCycleDelaySeconds") as? Int ?? 60
+        UserDefaults.standard.object(forKey: "brainCycleDelaySeconds") as? Int ?? 120
     }
     private var brainMaxCrashRestarts: Int {
         UserDefaults.standard.object(forKey: "brainMaxCrashRestarts") as? Int ?? 3

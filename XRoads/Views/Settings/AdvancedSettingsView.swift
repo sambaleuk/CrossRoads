@@ -6,7 +6,7 @@ import SwiftUI
 public struct AdvancedSettingsView: View {
 
     // Cockpit Brain
-    @AppStorage("brainCycleDelaySeconds") private var brainCycleDelay = 60
+    @AppStorage("brainCycleDelaySeconds") private var brainCycleDelay = 120
     @AppStorage("brainMaxCrashRestarts") private var brainMaxCrashRestarts = 3
     @AppStorage("brainMaxTurns") private var brainMaxTurns = 30
     @AppStorage("brainEnabled") private var brainEnabled = true
@@ -53,11 +53,11 @@ public struct AdvancedSettingsView: View {
 
             if brainEnabled {
                 Picker("Cycle Delay (between scans)", selection: $brainCycleDelay) {
-                    Text("10s (aggressive)").tag(10)
-                    Text("30s (balanced)").tag(30)
-                    Text("60s (default)").tag(60)
-                    Text("120s (relaxed)").tag(120)
-                    Text("300s (minimal)").tag(300)
+                    Text("30s (aggressive)").tag(30)
+                    Text("60s (balanced)").tag(60)
+                    Text("2 min (default)").tag(120)
+                    Text("5 min (relaxed)").tag(300)
+                    Text("10 min (minimal)").tag(600)
                 }
                 .foregroundStyle(Color.textPrimary)
 
@@ -247,7 +247,7 @@ public struct AdvancedSettingsView: View {
     }
 
     private func resetAdvancedToDefaults() {
-        brainCycleDelay = 60
+        brainCycleDelay = 120
         brainMaxCrashRestarts = 3
         brainMaxTurns = 30
         brainEnabled = true
