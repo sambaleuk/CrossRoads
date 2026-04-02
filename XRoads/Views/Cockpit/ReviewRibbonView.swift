@@ -16,6 +16,8 @@ struct ReviewRibbonView: View {
     @State private var selectedTab: RibbonTab = .proposals
     @State private var rootNode: TreeNode?
     @State private var selectedFile: TreeNode?
+    @State private var prdDocument: PRDDocument?
+    @State private var selectedStory: PRDUserStory?
     @State private var fileContent: String = ""
     @State private var oldFileContent: String = ""  // git HEAD version for split diff
     @State private var isLoadingFile: Bool = false
@@ -27,6 +29,7 @@ struct ReviewRibbonView: View {
     enum RibbonTab: String, CaseIterable {
         case proposals = "Proposals"
         case files = "Files"
+        case prd = "PRD"
         case preview = "Preview"
     }
 
@@ -59,6 +62,7 @@ struct ReviewRibbonView: View {
         .onAppear {
             loadFileTree()
             loadGitInfo()
+            loadPRD()
             if !viewModel.pendingProposals.isEmpty {
                 selectedTab = .proposals
             }
@@ -150,6 +154,8 @@ struct ReviewRibbonView: View {
             proposalsSidebar
         case .files:
             fileTreeSidebar
+        case .prd:
+            prdStorySidebar
         case .preview:
             fileTreeSidebar
         }
@@ -244,6 +250,8 @@ struct ReviewRibbonView: View {
             proposalsMainContent
         case .files:
             fileViewerContent
+        case .prd:
+            prdVisualizerContent
         case .preview:
             webPreviewContent
         }
@@ -481,6 +489,7 @@ struct ReviewRibbonView: View {
         switch tab {
         case .proposals: return "brain.head.profile"
         case .files: return "folder"
+        case .prd: return "list.clipboard"
         case .preview: return "globe"
         }
     }
@@ -612,6 +621,477 @@ struct ReviewRibbonView: View {
     }
 
     /// Run a git command synchronously and return stdout.
+    // MARK: - PRD Loading
+
+    private func loadPRD() {
+        Task {
+            // Scan for prd*.json in project root
+            let fm = FileManager.default
+            guard let entries = try? fm.contentsOfDirectory(atPath: projectPath) else { return }
+            let prdFiles = entries.filter { $0.hasPrefix("prd") && $0.hasSuffix(".json") }.sorted()
+            guard let prdFile = prdFiles.first else { return }
+
+            let prdPath = URL(fileURLWithPath: projectPath).appendingPathComponent(prdFile)
+            do {
+                let doc = try await PRDParser().parse(fileURL: prdPath)
+                await MainActor.run { prdDocument = doc }
+            } catch {
+                // Try raw JSON decode as fallback
+                if let data = fm.contents(atPath: prdPath.path),
+                   let doc = try? JSONDecoder().decode(PRDDocument.self, from: data) {
+                    await MainActor.run { prdDocument = doc }
+                }
+            }
+        }
+    }
+
+    // MARK: - PRD Sidebar
+
+    @ViewBuilder
+    private var prdStorySidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let doc = prdDocument {
+                // Progress bar
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("PROGRESS")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                        Spacer()
+                        Text("\(Int(doc.progress * 100))%")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.statusSuccess)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.bgElevated)
+                                .frame(height: 4)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.statusSuccess)
+                                .frame(width: geo.size.width * doc.progress, height: 4)
+                        }
+                    }
+                    .frame(height: 4)
+                    let completed = doc.userStories.filter { $0.status == .complete }.count
+                    Text("\(completed)/\(doc.userStories.count) stories")
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(Color.textTertiary)
+                }
+                .padding(Theme.Spacing.sm)
+
+                Divider().background(Color.borderMuted)
+
+                // Story list
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(doc.userStories) { story in
+                            Button {
+                                selectedStory = story
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(storyStatusColor(story.status))
+                                        .frame(width: 6, height: 6)
+                                    Text(story.id)
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(Color.textTertiary)
+                                    Text(story.title)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(selectedStory?.id == story.id ? Color.textPrimary : Color.textSecondary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    priorityBadge(story.priority)
+                                }
+                                .padding(.horizontal, Theme.Spacing.sm)
+                                .padding(.vertical, 4)
+                                .background(selectedStory?.id == story.id ? Color.bgElevated : Color.clear)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Theme.Spacing.xs)
+                    .padding(.vertical, Theme.Spacing.xs)
+                }
+            } else {
+                VStack(spacing: Theme.Spacing.sm) {
+                    Spacer()
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Color.textTertiary.opacity(0.4))
+                    Text("No PRD found")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.textTertiary)
+                    Text("Place a prd*.json in project root")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(Color.textTertiary.opacity(0.6))
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .background(Color.bgApp)
+    }
+
+    // MARK: - PRD Visualizer (Kanban + Detail)
+
+    @ViewBuilder
+    private var prdVisualizerContent: some View {
+        if let doc = prdDocument {
+            VStack(spacing: 0) {
+                // Header: feature name + description
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(doc.featureName)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.textPrimary)
+                        Text(doc.description)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    // Stats
+                    HStack(spacing: Theme.Spacing.md) {
+                        statBadge(label: "Total", value: "\(doc.userStories.count)", color: Color.textSecondary)
+                        statBadge(label: "Done", value: "\(doc.userStories.filter { $0.status == .complete }.count)", color: Color.statusSuccess)
+                        statBadge(label: "Active", value: "\(doc.userStories.filter { $0.status == .inProgress }.count)", color: Color.terminalCyan)
+                        statBadge(label: "Blocked", value: "\(doc.userStories.filter { $0.status == .blocked }.count)", color: Color.statusError)
+                    }
+                }
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm)
+                .background(Color.bgApp)
+
+                Divider().background(Color.borderMuted)
+
+                if let story = selectedStory {
+                    // Detail view for selected story
+                    storyDetailView(story, doc: doc)
+                } else {
+                    // Kanban board
+                    kanbanBoard(doc)
+                }
+            }
+        } else {
+            VStack(spacing: Theme.Spacing.md) {
+                Spacer()
+                Image(systemName: "list.clipboard")
+                    .font(.system(size: 36))
+                    .foregroundStyle(Color.textTertiary.opacity(0.3))
+                Text("No PRD loaded")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.textTertiary)
+                Text("Open a project with a prd*.json file")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.textTertiary.opacity(0.6))
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func kanbanBoard(_ doc: PRDDocument) -> some View {
+        let columns: [(title: String, status: PRDStoryStatus, color: Color)] = [
+            ("PENDING", .pending, Color.textTertiary),
+            ("IN PROGRESS", .inProgress, Color.terminalCyan),
+            ("DONE", .complete, Color.statusSuccess),
+            ("BLOCKED", .blocked, Color.statusError),
+        ]
+
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                ForEach(columns, id: \.title) { col in
+                    let stories = doc.userStories.filter { $0.status == col.status }
+
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        // Column header
+                        HStack {
+                            Circle()
+                                .fill(col.color)
+                                .frame(width: 6, height: 6)
+                            Text(col.title)
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(col.color)
+                            Spacer()
+                            Text("\(stories.count)")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color.textTertiary)
+                        }
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, 4)
+
+                        Divider().background(col.color.opacity(0.3))
+
+                        // Story cards
+                        ScrollView {
+                            LazyVStack(spacing: Theme.Spacing.xs) {
+                                ForEach(stories) { story in
+                                    Button {
+                                        selectedStory = story
+                                    } label: {
+                                        kanbanCard(story, doc: doc)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, Theme.Spacing.xs)
+                        }
+                    }
+                    .frame(width: 240)
+                    .background(Color.bgApp.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                            .stroke(col.color.opacity(0.15), lineWidth: 1)
+                    )
+                }
+            }
+            .padding(Theme.Spacing.md)
+        }
+    }
+
+    @ViewBuilder
+    private func kanbanCard(_ story: PRDUserStory, doc: PRDDocument) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(story.id)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.terminalCyan)
+                Spacer()
+                priorityBadge(story.priority)
+            }
+
+            Text(story.title)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(2)
+
+            // Dependencies indicator
+            if !story.dependsOn.isEmpty {
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 7))
+                        .foregroundStyle(Color.textTertiary)
+                    Text(story.dependsOn.joined(separator: ", "))
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(Color.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            // Test status
+            if let test = story.unitTest {
+                HStack(spacing: 3) {
+                    Image(systemName: test.status == .passing ? "checkmark.circle.fill" : test.status == .failing ? "xmark.circle.fill" : "circle")
+                        .font(.system(size: 8))
+                        .foregroundStyle(test.status == .passing ? Color.statusSuccess : test.status == .failing ? Color.statusError : Color.textTertiary)
+                    Text(test.status.rawValue)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(Color.textTertiary)
+                }
+            }
+        }
+        .padding(Theme.Spacing.sm)
+        .background(Color.bgElevated)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                .stroke(Color.borderMuted, lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private func storyDetailView(_ story: PRDUserStory, doc: PRDDocument) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                // Back button
+                Button {
+                    selectedStory = nil
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 10))
+                        Text("Back to board")
+                            .font(.system(size: 10, design: .monospaced))
+                    }
+                    .foregroundStyle(Color.terminalCyan)
+                }
+                .buttonStyle(.plain)
+
+                // Story header
+                HStack {
+                    Text(story.id)
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.terminalCyan)
+                    priorityBadge(story.priority)
+                    Circle()
+                        .fill(storyStatusColor(story.status))
+                        .frame(width: 8, height: 8)
+                    Text(story.status.displayName)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(storyStatusColor(story.status))
+                    Spacer()
+                    if story.estimatedComplexity > 0 {
+                        Text("Complexity: \(story.estimatedComplexity)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                    }
+                }
+
+                // Title
+                Text(story.title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.textPrimary)
+
+                // Description
+                Text(story.description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.textSecondary)
+
+                // Dependencies
+                if !story.dependsOn.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("DEPENDENCIES")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                        ForEach(story.dependsOn, id: \.self) { depId in
+                            let dep = doc.userStories.first { $0.id == depId }
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.turn.down.right")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Color.textTertiary)
+                                Text(depId)
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(Color.terminalCyan)
+                                if let dep {
+                                    Text(dep.title)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(Color.textSecondary)
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Circle()
+                                        .fill(storyStatusColor(dep.status))
+                                        .frame(width: 5, height: 5)
+                                }
+                            }
+                        }
+                    }
+                    .padding(Theme.Spacing.sm)
+                    .background(Color.bgApp)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                }
+
+                // Acceptance criteria
+                if !story.acceptanceCriteria.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ACCEPTANCE CRITERIA")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                        ForEach(Array(story.acceptanceCriteria.enumerated()), id: \.offset) { _, criteria in
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: "checkmark.square")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.statusSuccess.opacity(0.6))
+                                Text(criteria)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(Color.textSecondary)
+                            }
+                        }
+                    }
+                    .padding(Theme.Spacing.sm)
+                    .background(Color.bgApp)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                }
+
+                // Unit test
+                if let test = story.unitTest {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("UNIT TEST")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color.textTertiary)
+                            Spacer()
+                            Text(test.status.rawValue.uppercased())
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundStyle(test.status == .passing ? Color.statusSuccess : test.status == .failing ? Color.statusError : Color.textTertiary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background((test.status == .passing ? Color.statusSuccess : test.status == .failing ? Color.statusError : Color.textTertiary).opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                        if !test.file.isEmpty {
+                            Text(test.file)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Color.terminalCyan)
+                        }
+                        Text(test.description)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color.textSecondary)
+                        if !test.assertions.isEmpty {
+                            ForEach(test.assertions, id: \.self) { assertion in
+                                HStack(spacing: 4) {
+                                    Text("•")
+                                        .foregroundStyle(Color.terminalCyan)
+                                    Text(assertion)
+                                        .font(.system(size: 9, design: .monospaced))
+                                        .foregroundStyle(Color.textSecondary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(Theme.Spacing.sm)
+                    .background(Color.bgApp)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+                }
+            }
+            .padding(Theme.Spacing.md)
+        }
+    }
+
+    // MARK: - PRD Helpers
+
+    private func storyStatusColor(_ status: PRDStoryStatus) -> Color {
+        switch status {
+        case .pending: return Color.textTertiary
+        case .inProgress: return Color.terminalCyan
+        case .complete: return Color.statusSuccess
+        case .blocked: return Color.statusError
+        }
+    }
+
+    @ViewBuilder
+    private func priorityBadge(_ priority: PRDPriority) -> some View {
+        let color: Color = {
+            switch priority {
+            case .critical: return Color.statusError
+            case .high: return Color.statusWarning
+            case .medium: return Color.terminalYellow
+            case .low: return Color.textTertiary
+            }
+        }()
+        Text(priority.displayName.prefix(1).uppercased())
+            .font(.system(size: 7, weight: .bold, design: .monospaced))
+            .foregroundStyle(color)
+            .frame(width: 14, height: 14)
+            .background(color.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
+    @ViewBuilder
+    private func statBadge(label: String, value: String, color: Color) -> some View {
+        VStack(spacing: 1) {
+            Text(value)
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 7, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color.textTertiary)
+        }
+    }
+
     private func runGit(_ arguments: [String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
