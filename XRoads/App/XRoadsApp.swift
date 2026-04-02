@@ -1,9 +1,13 @@
 import SwiftUI
+import Sparkle
 
 public struct XRoadsApp: App {
 
     /// Global application state
     @State private var appState = AppState()
+
+    /// Sparkle update service
+    @State private var updater = UpdaterService()
 
     /// NSApplicationDelegate for lifecycle events
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -39,6 +43,9 @@ public struct XRoadsApp: App {
         )
         .commands {
             XRoadsCommands(appState: appState)
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updater)
+            }
         }
 
         // Settings window (US-019)

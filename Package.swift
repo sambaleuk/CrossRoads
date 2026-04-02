@@ -11,7 +11,8 @@ let package = Package(
         .library(name: "XRoadsLib", targets: ["XRoadsLib"])
     ],
     dependencies: [
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0")
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", from: "2.6.0")
     ],
     targets: [
         // Main library for testability
@@ -19,7 +20,8 @@ let package = Package(
         .target(
             name: "XRoadsLib",
             dependencies: [
-                .product(name: "GRDB", package: "GRDB.swift")
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "Sparkle", package: "Sparkle")
             ],
             path: "XRoads",
             exclude: [
