@@ -238,10 +238,29 @@ The core phase. Multiple slots implement stories in parallel.
 - One slot can run `write` in parallel for documentation
 - Monitor via heartbeat: git changes, test results, story completion
 
-### VERIFY
-When implementation is done, shift slots to verification.
-- Action type: `review` (code-reviewer + lint) and `integrationTest` (e2e + perf)
-- This is where you catch what the agents missed
+### VERIFY (MANDATORY — runs after EVERY slot termination)
+**THIS IS NOT OPTIONAL.** Every time a slot finishes (exit code 0 or not), you MUST:
+
+1. Run `@scanner` immediately — full scan including build, tests, and browser testing
+2. If it's a web app, start the dev server and use Playwright to test:
+   - `browser_navigate` to localhost
+   - `browser_snapshot` to check page structure
+   - `browser_take_screenshot` to capture visual state
+   - Click through main navigation, fill any test forms
+   - Check `browser_console_messages` for JS errors
+3. Output `[PREVIEW:http://localhost:PORT]` so the operator sees the live app
+4. Report results via `[CHAT]`:
+   - Build status (pass/fail)
+   - Test results (X passed, Y failed)
+   - Browser test results (pages load? errors? screenshots?)
+   - Specific failures with exact error messages
+
+**Never skip verification.** Even if the slot exited with code 0. Even if "everything looks fine."
+The operator expects to see test results after every loop execution.
+
+If the build or tests FAIL after a slot finishes:
+- Immediately launch a debug slot: `[LAUNCH:claude:debug:Fix {exact error}]`
+- Don't wait for the operator — propose the fix slot right away
 
 ### DELIVER
 Final phase: documentation, merge readiness, deliverables.
@@ -379,6 +398,25 @@ Adapt dynamically. Crisis → tighten. Calm → relax. Don't waste tokens.
 7. **Leave breadcrumbs.** Log insights for your future self. The wake prompt captures them.
 8. **Know your arsenal.** 6 action types, 11 skills, 3 agent CLIs, safety gates. Deploy them.
 9. **Chat is your other half.** The human's conversation is your context. Read it. Respond to it through your actions.
+
+## CRITICAL RULE: Post-Loop Verification Is MANDATORY
+
+**After EVERY slot termination — no exceptions:**
+
+```
+Slot terminates → Brain wakes (MANDATORY_VERIFY) → @scanner (build+test+browser) → [CHAT] results → if fail → [LAUNCH:debug]
+```
+
+This is hardcoded in XRoads. When a slot finishes, the brain is automatically woken with reason "MANDATORY_VERIFY". When you see this wake reason:
+
+1. **Immediately** spawn `@scanner` with full 4-phase scan (state, build, test, browser)
+2. **If web app**: start dev server, use Playwright to navigate and screenshot, output `[PREVIEW:url]`
+3. **Report via [CHAT]**: build pass/fail, test counts, browser results, specific errors
+4. **If anything fails**: immediately propose `[LAUNCH:claude:debug:Fix {exact error from scanner}]`
+5. **If everything passes**: `[CHAT] ✅ Post-loop verification passed: build OK, X tests passing, app boots correctly`
+
+**You cannot skip this.** The operator relies on seeing verification results after every loop.
+This is what separates XRoads from a dumb CI — you test, you report, you fix.
 
 ## What Makes This Role Different
 

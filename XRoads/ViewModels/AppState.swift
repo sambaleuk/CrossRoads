@@ -1098,6 +1098,10 @@ final class AppState {
 
         // Update orchestrator visual state if no more running slots
         updateOrchestratorStateAfterTermination()
+
+        // MANDATORY: Wake brain for post-slot verification (build + test + browser)
+        // This is non-negotiable — every slot termination triggers a full verify cycle
+        cockpitViewModel?.wakeBrain(reason: "MANDATORY_VERIFY: slot \(slotNumber) terminated (exit \(exitCode)) — run scanner + build + test + browser check")
     }
 
     /// Update orchestrator visual state after a slot terminates
