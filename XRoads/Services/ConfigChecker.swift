@@ -206,16 +206,7 @@ actor ConfigChecker {
 
         // Inherit environment and enhance PATH to include common locations
         var env = Foundation.ProcessInfo.processInfo.environment
-        let home = NSHomeDirectory()
-        let additionalPaths = [
-            "\(home)/.nvm/versions/node/v20.19.4/bin",
-            "\(home)/.nvm/versions/node/v22.0.0/bin",
-            "\(home)/.local/bin",
-            "/opt/homebrew/bin",
-            "/usr/local/bin"
-        ]
-        let currentPath = env["PATH"] ?? "/usr/bin:/bin"
-        env["PATH"] = additionalPaths.joined(separator: ":") + ":" + currentPath
+        env["PATH"] = PathResolver.enhancedPATH
         process.environment = env
 
         let outputPipe = Pipe()
@@ -246,36 +237,7 @@ actor ConfigChecker {
     /// - Parameter tool: Name of the tool to find
     /// - Returns: Path to the tool if found, nil otherwise
     private func findToolDirectly(tool: String) -> String? {
-        let fileManager = FileManager.default
-        let home = NSHomeDirectory()
-
-        // Common paths for CLI tools
-        let searchPaths: [String] = [
-            // NVM (Node-based CLIs like claude)
-            "\(home)/.nvm/versions/node/v20.19.4/bin/\(tool)",
-            "\(home)/.nvm/versions/node/v22.0.0/bin/\(tool)",
-            "\(home)/.nvm/versions/node/v21.0.0/bin/\(tool)",
-            "\(home)/.nvm/versions/node/v18.0.0/bin/\(tool)",
-            // Homebrew
-            "/opt/homebrew/bin/\(tool)",
-            "/usr/local/bin/\(tool)",
-            // System
-            "/usr/bin/\(tool)",
-            // Local
-            "\(home)/.local/bin/\(tool)",
-            "\(home)/bin/\(tool)"
-        ]
-
-        for path in searchPaths {
-            if fileManager.fileExists(atPath: path) {
-                // Verify it's executable
-                if fileManager.isExecutableFile(atPath: path) {
-                    return path
-                }
-            }
-        }
-
-        return nil
+        PathResolver.findBinary(tool)
     }
 
     /// Gets version of a tool if available

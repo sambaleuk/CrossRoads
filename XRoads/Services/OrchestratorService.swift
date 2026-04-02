@@ -86,7 +86,7 @@ actor OrchestratorService {
     // MARK: - Constants
 
     private static let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
-    private static let defaultModel = "claude-sonnet-4-20250514"
+    private static let defaultModel = APIProvider.claudeDefaultModel
     private static let maxTokens = 4096
 
     static let defaultSystemPrompt = """
@@ -904,32 +904,6 @@ actor OrchestratorService {
     }
 
     private func findClaudeCLI() -> String? {
-        let home = NSHomeDirectory()
-        var possiblePaths = [
-            "/usr/local/bin/claude",
-            "/opt/homebrew/bin/claude",
-            "\(home)/.local/bin/claude",
-            "\(home)/.npm-global/bin/claude"
-        ]
-
-        // Check nvm directories for node-installed CLI
-        let nvmDir = "\(home)/.nvm/versions/node"
-        if let nodeVersions = try? FileManager.default.contentsOfDirectory(atPath: nvmDir) {
-            for version in nodeVersions {
-                possiblePaths.append("\(nvmDir)/\(version)/bin/claude")
-            }
-        }
-
-        // Also check volta if installed
-        let voltaDir = "\(home)/.volta/bin"
-        possiblePaths.append("\(voltaDir)/claude")
-
-        for path in possiblePaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        return nil
+        PathResolver.findBinary("claude")
     }
 }

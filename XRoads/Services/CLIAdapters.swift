@@ -83,43 +83,9 @@ struct ClaudeAdapter: CLIAdapter {
         self.resumeConversationId = resumeConversationId
     }
 
-    /// Attempts to find claude CLI in common locations
+    /// Attempts to find claude CLI using PathResolver (dynamic NVM + standard paths).
     private static func detectClaudePath() -> String {
-        let possiblePaths = [
-            "/usr/local/bin/claude",
-            "/opt/homebrew/bin/claude",
-            "\(NSHomeDirectory())/.nvm/versions/node/v20.19.4/bin/claude",
-            "\(NSHomeDirectory())/.nvm/versions/node/v22.0.0/bin/claude",
-            "\(NSHomeDirectory())/.local/bin/claude"
-        ]
-
-        for path in possiblePaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Fallback: try to find via shell
-        if let path = try? shellWhich("claude") {
-            return path
-        }
-
-        return "/usr/local/bin/claude"
-    }
-
-    /// Uses shell to find executable
-    private static func shellWhich(_ command: String) throws -> String? {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", "which \(command)"]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path?.isEmpty == false ? path : nil
+        PathResolver.findBinary("claude") ?? "/usr/local/bin/claude"
     }
 
     func launchArguments(worktreePath: String) -> [String] {
@@ -158,41 +124,7 @@ struct GeminiAdapter: CLIAdapter {
 
     /// Attempts to find gemini CLI in common locations
     private static func detectGeminiPath() -> String {
-        let possiblePaths = [
-            "/opt/homebrew/bin/gemini",
-            "/usr/local/bin/gemini",
-            "\(NSHomeDirectory())/.local/bin/gemini",
-            "\(NSHomeDirectory())/.nvm/versions/node/v20.19.4/bin/gemini",
-            "\(NSHomeDirectory())/.nvm/versions/node/v22.0.0/bin/gemini"
-        ]
-
-        for path in possiblePaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Fallback: try to find via shell
-        if let path = try? shellWhich("gemini") {
-            return path
-        }
-
-        return "/opt/homebrew/bin/gemini"
-    }
-
-    /// Uses shell to find executable
-    private static func shellWhich(_ command: String) throws -> String? {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", "which \(command)"]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path?.isEmpty == false ? path : nil
+        PathResolver.findBinary("gemini") ?? "/usr/local/bin/gemini"
     }
 
     func launchArguments(worktreePath: String) -> [String] {
@@ -221,44 +153,8 @@ struct CodexAdapter: CLIAdapter {
         self.executablePath = executablePath ?? Self.detectCodexPath()
     }
 
-    /// Attempts to find codex CLI in common locations
     private static func detectCodexPath() -> String {
-        let possiblePaths = [
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex",
-            "\(NSHomeDirectory())/.nvm/versions/node/v20.19.4/bin/codex",
-            "\(NSHomeDirectory())/.nvm/versions/node/v22.0.0/bin/codex",
-            "\(NSHomeDirectory())/.local/bin/codex",
-            "\(NSHomeDirectory())/bin/codex"
-        ]
-
-        for path in possiblePaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Fallback: try to find via shell
-        if let path = try? shellWhich("codex") {
-            return path
-        }
-
-        return "/usr/local/bin/codex"
-    }
-
-    /// Uses shell to find executable
-    private static func shellWhich(_ command: String) throws -> String? {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", "which \(command)"]
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path?.isEmpty == false ? path : nil
+        PathResolver.findBinary("codex") ?? "/usr/local/bin/codex"
     }
 
     func launchArguments(worktreePath: String) -> [String] {

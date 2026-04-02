@@ -166,6 +166,9 @@ final class AppState {
                     // Route to dashboard terminal slot
                     self.appendSlotOutput(slotNumber: slotNumber, output: output)
 
+                    // Auto-detect localhost dev server URLs in agent output
+                    Self.detectLocalhostURL(in: output, cockpitVM: self.cockpitViewModel)
+
                     // Also add to main MCP logs panel (BoundedBuffer)
                     let worktreePath = self.terminalSlots.first(where: { $0.slotNumber == slotNumber })?.worktree?.path
                     let logEntry = LogEntry(
@@ -352,28 +355,59 @@ final class AppState {
                     }
                 }
 
-                // Listen for brain slot launch requests
+                // Listen for brain proposals (routed through approval ribbon)
                 NotificationCenter.default.addObserver(
-                    forName: .brainRequestsSlotLaunch,
+                    forName: .brainProposalReceived,
                     object: nil,
                     queue: .main
                 ) { [weak self] notification in
                     guard let self = self,
                           let info = notification.userInfo,
-                          let agentType = info["agentType"] as? String,
-                          let role = info["role"] as? String,
-                          let task = info["task"] as? String,
-                          let cockpitVM = self.cockpitViewModel,
-                          let projectPath = self.projectPath
+                          let proposal = info["proposal"] as? BrainProposal,
+                          let cockpitVM = self.cockpitViewModel
                     else { return }
 
                     self.addLog(LogEntry(level: .info, source: "brain", worktree: nil,
-                        message: "Brain requests slot: \(agentType) as \(role) — \(task)"))
+                        message: "Brain proposal: \(proposal.title) [\(proposal.type.rawValue)]"))
 
                     Task { @MainActor in
-                        await cockpitVM.launchSlotFromBrain(
-                            agentType: agentType, role: role, task: task, projectPath: projectPath
-                        )
+                        cockpitVM.receiveBrainProposal(proposal)
+                    }
+                }
+
+                // Listen for preview URL from brain [PREVIEW:url] protocol
+                NotificationCenter.default.addObserver(
+                    forName: .previewURLReceived,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let url = info["url"] as? String,
+                          let cockpitVM = self.cockpitViewModel
+                    else { return }
+
+                    Task { @MainActor in
+                        cockpitVM.previewURL = url
+                        cockpitVM.showReviewRibbon = true
+                    }
+                }
+
+                // Listen for agent screenshots (Playwright)
+                NotificationCenter.default.addObserver(
+                    forName: .agentScreenshotReceived,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let info = notification.userInfo,
+                          let slotNumber = info["slotNumber"] as? Int,
+                          let imageData = info["imageData"] as? Data,
+                          let cockpitVM = self.cockpitViewModel
+                    else { return }
+
+                    Task { @MainActor in
+                        cockpitVM.agentScreenshots[slotNumber] = imageData
                     }
                 }
 
@@ -2831,6 +2865,34 @@ final class AppState {
 // MARK: - AppError
 
 /// Application-level errors for user display
+// MARK: - Localhost URL Detection
+
+extension AppState {
+    /// Detect localhost/dev server URLs in agent output and auto-set the preview URL.
+    /// Matches patterns like: http://localhost:3000, http://127.0.0.1:5173, etc.
+    static func detectLocalhostURL(in output: String, cockpitVM: CockpitViewModel?) {
+        guard let cockpitVM, cockpitVM.previewURL.isEmpty else { return }
+
+        let patterns = [
+            "http://localhost:\\d+",
+            "http://127\\.0\\.0\\.1:\\d+",
+            "https://localhost:\\d+",
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: output, range: NSRange(output.startIndex..., in: output)),
+               let range = Range(match.range, in: output) {
+                let url = String(output[range])
+                Task { @MainActor in
+                    cockpitVM.previewURL = url
+                    // Don't auto-show ribbon for every URL detection — just set the URL
+                }
+                return
+            }
+        }
+    }
+}
+
 enum AppError: Error, LocalizedError, Identifiable {
     case gitError(String)
     case processError(String)

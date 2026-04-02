@@ -89,4 +89,31 @@ extension Notification.Name {
     /// Posted when a cockpit session closes with an OrchestrationRecord ready for persistence.
     /// UserInfo: "record" (OrchestrationRecord)
     static let cockpitSessionRecordReady = Notification.Name("cockpitSessionRecordReady")
+
+    // MARK: - Brain Proposals (Review Ribbon)
+
+    /// Posted when the brain proposes an action requiring operator approval.
+    /// UserInfo: "proposal" (BrainProposal)
+    static let brainProposalReceived = Notification.Name("brainProposalReceived")
+
+    /// Posted when the operator approves a brain proposal.
+    /// UserInfo: "proposal" (BrainProposal)
+    static let brainProposalApproved = Notification.Name("brainProposalApproved")
+
+    /// Posted when the operator rejects a brain proposal.
+    /// UserInfo: "proposal" (BrainProposal)
+    static let brainProposalRejected = Notification.Name("brainProposalRejected")
+
+    /// Toggle the review ribbon overlay.
+    static let toggleReviewRibbon = Notification.Name("toggleReviewRibbon")
+
+    // MARK: - Preview & Agent Vision
+
+    /// Posted when the brain or an agent sends a preview URL (dev server detected).
+    /// UserInfo: "url" (String)
+    static let previewURLReceived = Notification.Name("previewURLReceived")
+
+    /// Posted when an agent takes a screenshot via Playwright.
+    /// UserInfo: "slotNumber" (Int), "imageData" (Data), "url" (String?)
+    static let agentScreenshotReceived = Notification.Name("agentScreenshotReceived")
 }

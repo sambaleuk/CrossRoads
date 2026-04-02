@@ -141,21 +141,21 @@ public struct CLIConfiguration: Codable, Sendable, Equatable {
 
     /// Default configuration for Claude CLI
     public static let defaultClaude = CLIConfiguration(
-        path: CLIConfiguration.autoDetectPath(for: "claude") ?? "/usr/local/bin/claude",
+        path: CLIConfiguration.autoDetectPath(for: "claude") ?? PathResolver.findBinary("claude") ?? "claude",
         defaultArguments: ["--dangerously-skip-permissions"],
         isEnabled: true
     )
 
     /// Default configuration for Gemini CLI
     public static let defaultGemini = CLIConfiguration(
-        path: CLIConfiguration.autoDetectPath(for: "gemini") ?? "/opt/homebrew/bin/gemini",
+        path: CLIConfiguration.autoDetectPath(for: "gemini") ?? PathResolver.findBinary("gemini") ?? "gemini",
         defaultArguments: ["--sandbox=false"],
         isEnabled: true
     )
 
     /// Default configuration for Codex CLI
     public static let defaultCodex = CLIConfiguration(
-        path: CLIConfiguration.autoDetectPath(for: "codex") ?? "/usr/local/bin/codex",
+        path: CLIConfiguration.autoDetectPath(for: "codex") ?? PathResolver.findBinary("codex") ?? "codex",
         defaultArguments: ["--full-auto"],
         isEnabled: true
     )

@@ -396,11 +396,11 @@ final class SessionViewModel: ObservableObject {
     private func executablePath(for agentType: AgentType) -> String {
         switch agentType {
         case .claude:
-            return "/usr/local/bin/claude"
+            return PathResolver.findBinary("claude") ?? "/usr/local/bin/claude"
         case .gemini:
-            return "/usr/local/bin/gemini"
+            return PathResolver.findBinary("gemini") ?? "/usr/local/bin/gemini"
         case .codex:
-            return "/usr/local/bin/codex"
+            return PathResolver.findBinary("codex") ?? "/usr/local/bin/codex"
         }
     }
 

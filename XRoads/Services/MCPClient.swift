@@ -434,7 +434,7 @@ actor MCPClient {
     /// Find Node.js executable path
     static func findNodePath() -> String {
         let fileManager = FileManager.default
-        let home = NSHomeDirectory()
+        let home = PathResolver.home
 
         // 1. NVM: glob all installed versions and pick the latest
         if let nvmNode = findLatestNVMNode(home: home, fileManager: fileManager) {
@@ -480,7 +480,7 @@ actor MCPClient {
     /// Discover the latest NVM-installed Node.js by globbing ~/.nvm/versions/node/*/bin/node
     /// and sorting version directories in descending semver order.
     static func findLatestNVMNode(
-        home: String = NSHomeDirectory(),
+        home: String = PathResolver.home,
         fileManager: FileManager = .default
     ) -> String? {
         let nvmVersionsDir = (home as NSString).appendingPathComponent(".nvm/versions/node")
@@ -557,17 +557,25 @@ actor MCPClient {
                 if searchPath.contains("DerivedData") {
                     // Common project locations
                     let home = fileManager.homeDirectoryForCurrentUser.path
-                    let projectNames = ["CrossRoads", "XRoads"]
-                    let baseDirs = ["Projets", "Projects", "Documents", "Desktop"]
                     var possibleProjects: [String] = []
 
+                    // 1. Env var override (primary — recommended for users)
                     if let envPath = getenv("CROSSROADS_PROJECT_DIR") {
                         possibleProjects.append(String(cString: envPath))
                     }
 
-                    for base in baseDirs {
-                        for projectName in projectNames {
-                            possibleProjects.append("\(home)/\(base)/\(projectName)")
+                    // 2. Scan common dev directories for any folder containing xroads-mcp/
+                    let devDirs = ["Projects", "Projets", "Documents", "Desktop", "Developer", "Code", "repos", "code", "dev"]
+                    for base in devDirs {
+                        let baseDir = "\(home)/\(base)"
+                        if let entries = try? fileManager.contentsOfDirectory(atPath: baseDir) {
+                            for entry in entries {
+                                let candidate = "\(baseDir)/\(entry)"
+                                let mcpCheck = (candidate as NSString).appendingPathComponent("xroads-mcp")
+                                if fileManager.fileExists(atPath: mcpCheck) {
+                                    possibleProjects.append(candidate)
+                                }
+                            }
                         }
                     }
                     

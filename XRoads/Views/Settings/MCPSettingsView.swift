@@ -504,9 +504,7 @@ public enum MCPPathValidator {
         if resolvedPath.hasSuffix(".js") {
             // Find node path
             let nodePaths = [
-                "/usr/local/bin/node",
-                "/opt/homebrew/bin/node",
-                NSHomeDirectory() + "/.nvm/versions/node/v20.0.0/bin/node"
+                PathResolver.findBinary("node") ?? "/usr/local/bin/node"
             ]
 
             var nodePath: String?

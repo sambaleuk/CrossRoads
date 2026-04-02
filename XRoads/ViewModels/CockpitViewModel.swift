@@ -43,6 +43,20 @@ final class CockpitViewModel {
     /// US-004: Whether the audit trail panel is shown
     var showAuditTrail: Bool = false
 
+    /// Brain proposals awaiting operator approval in the Review Ribbon.
+    /// Keyed by proposal ID. Only pending proposals are tracked here.
+    var pendingProposals: [UUID: BrainProposal] = [:]
+
+    /// Whether the Review Ribbon overlay is visible.
+    var showReviewRibbon: Bool = false
+
+    /// Preview URL for the Review Ribbon's browser tab.
+    /// Auto-detected from agent output (localhost URLs) or set via [PREVIEW:url] protocol.
+    var previewURL: String = ""
+
+    /// Latest agent screenshot (base64 PNG data) per slot.
+    var agentScreenshots: [Int: Data] = [:]
+
     /// Per-slot cost summaries, keyed by slot ID
     var slotCosts: [UUID: UsageSummary] = [:]
 
@@ -880,6 +894,116 @@ final class CockpitViewModel {
             let msg = error.localizedDescription
             errorMessage = msg
             logger.error("Reject gate failed: \(msg)")
+        }
+    }
+
+    // MARK: - Brain Proposal Approval
+
+    /// Adds a brain proposal to the pending queue and shows the ribbon.
+    func receiveBrainProposal(_ proposal: BrainProposal) {
+        pendingProposals[proposal.id] = proposal
+        showReviewRibbon = true
+
+        // Notify chat
+        NotificationCenter.default.post(
+            name: .cockpitBrainToChat,
+            object: nil,
+            userInfo: ["content": "🔔 Brain proposes: \(proposal.title) — review in ribbon"]
+        )
+
+        logger.info("Brain proposal received: \(proposal.title) [\(proposal.type.rawValue)]")
+    }
+
+    /// Approves a brain proposal and executes the corresponding action.
+    func approveProposal(_ proposal: BrainProposal) async {
+        var approved = proposal
+        approved.status = .approved
+        approved.resolvedAt = Date()
+        approved.resolvedBy = "operator"
+        pendingProposals.removeValue(forKey: proposal.id)
+
+        // Auto-hide ribbon when no more proposals
+        if pendingProposals.isEmpty {
+            showReviewRibbon = false
+        }
+
+        // Execute the approved action
+        switch proposal.type {
+        case .launch:
+            if let agentType = proposal.agentType,
+               let role = proposal.role,
+               let task = proposal.task,
+               let projectPath = session?.projectPath {
+                await launchSlotFromBrain(
+                    agentType: agentType,
+                    role: role,
+                    task: task,
+                    projectPath: projectPath
+                )
+            }
+
+        case .suite:
+            if let suiteId = proposal.suiteId {
+                NotificationCenter.default.post(
+                    name: .suiteSwitched,
+                    object: nil,
+                    userInfo: ["suiteId": suiteId]
+                )
+            }
+
+        case .decision, .alert:
+            // Acknowledged — notify brain
+            NotificationCenter.default.post(
+                name: .cockpitBrainToChat,
+                object: nil,
+                userInfo: ["content": "✅ Approved: \(proposal.title)"]
+            )
+        }
+
+        NotificationCenter.default.post(
+            name: .brainProposalApproved,
+            object: nil,
+            userInfo: ["proposal": approved]
+        )
+
+        logger.info("Proposal approved: \(proposal.title)")
+        wakeBrain(reason: "proposal approved: \(proposal.title)")
+    }
+
+    /// Rejects a brain proposal.
+    func rejectProposal(_ proposal: BrainProposal, reason: String? = nil) {
+        var rejected = proposal
+        rejected.status = .rejected
+        rejected.resolvedAt = Date()
+        rejected.resolvedBy = "operator"
+        pendingProposals.removeValue(forKey: proposal.id)
+
+        // Auto-hide ribbon when no more proposals
+        if pendingProposals.isEmpty {
+            showReviewRibbon = false
+        }
+
+        NotificationCenter.default.post(
+            name: .brainProposalRejected,
+            object: nil,
+            userInfo: ["proposal": rejected]
+        )
+
+        NotificationCenter.default.post(
+            name: .cockpitBrainToChat,
+            object: nil,
+            userInfo: ["content": "❌ Rejected: \(proposal.title)\(reason.map { " — \($0)" } ?? "")"]
+        )
+
+        logger.info("Proposal rejected: \(proposal.title)")
+        wakeBrain(reason: "proposal rejected: \(proposal.title)")
+    }
+
+    /// Approves all pending proposals at once.
+    func approveAllProposals() async {
+        let proposals = Array(pendingProposals.values)
+        for proposal in proposals {
+            await approveProposal(proposal)
         }
     }
 

@@ -69,10 +69,15 @@ public enum APIProvider: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// Default model, overridable via XROADS_DEFAULT_MODEL env var.
+    public static let claudeDefaultModel: String = {
+        ProcessInfo.processInfo.environment["XROADS_DEFAULT_MODEL"] ?? "claude-sonnet-4-20250514"
+    }()
+
     public var defaultModel: String {
         switch self {
         case .anthropic:
-            return "claude-sonnet-4-20250514"
+            return Self.claudeDefaultModel
         case .openai:
             return "gpt-4-turbo-preview"
         case .google:
@@ -95,7 +100,7 @@ public struct APIConfig: Codable, Sendable, Equatable {
     // Default configurations
     public static let defaultAnthropic = APIConfig(
         provider: .anthropic,
-        model: "claude-sonnet-4-20250514",
+        model: APIProvider.claudeDefaultModel,
         maxTokens: 4096,
         temperature: 0.7,
         stream: true,

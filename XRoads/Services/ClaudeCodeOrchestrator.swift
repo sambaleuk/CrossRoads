@@ -154,7 +154,7 @@ actor ClaudeCodeOrchestrator {
             ofItemAtPath: scriptPath.path
         )
 
-        // Generate settings.local.json
+        // Generate settings.local.json with hooks + Playwright MCP for browser testing
         let settings: [String: Any] = [
             "hooks": [
                 "PreToolUse": [
@@ -176,6 +176,16 @@ actor ClaudeCodeOrchestrator {
                                 "prompt": "Verify: are all assigned tasks complete with passing tests? List any remaining work."
                             ]
                         ]
+                    ]
+                ]
+            ],
+            "mcpServers": [
+                "playwright": [
+                    "command": "npx",
+                    "args": [
+                        "@playwright/mcp@latest",
+                        "--headless",
+                        "--viewport-size=1280x720"
                     ]
                 ]
             ]
@@ -722,19 +732,60 @@ actor ClaudeCodeOrchestrator {
         isolation: false
         ---
 
-        # Scanner — Project State Observer
+        # Scanner — Project State Observer + Functional Tester
 
         You are a READ-ONLY scanner for **\(projectName)**. You NEVER modify files.
 
         ## Your Job
-        Scan the current state and return a structured report. Nothing else.
+        Scan the current state, try to BUILD and RUN the project, run tests, and return a structured report.
 
-        ## What to Scan
+        ## Phase 1: Project State
         1. `git worktree list` — active worktrees
         2. For each worktree: `git -C {path} log --oneline -5` + `git -C {path} diff --stat`
         3. `find . -name "prd*.json" -maxdepth 3` — PRD files
         4. Read any prd.json found — count stories, check statuses
         5. `ls -la` of project root — file structure overview
+
+        ## Phase 2: Build & Launch Attempt
+        Detect the project type and try to build/launch:
+        - **Node.js** (package.json): `npm install && npm run build` (or `yarn build`)
+        - **Python** (requirements.txt/pyproject.toml): `pip install -r requirements.txt && python -m pytest --co -q` (collect tests)
+        - **Rust** (Cargo.toml): `cargo check`
+        - **Swift** (Package.swift): `swift build`
+        - **Go** (go.mod): `go build ./...`
+        - **Other**: Try `make` or report "unknown build system"
+
+        If the build succeeds, try to start the app briefly (timeout 10s) to verify it boots:
+        - Node: `timeout 10 npm run dev 2>&1 || true` (capture first output)
+        - Python: `timeout 10 python manage.py runserver 2>&1 || timeout 10 python -m flask run 2>&1 || true`
+        - Other: skip launch, build success is enough
+
+        Capture ALL output (stdout + stderr). Report build status and any errors verbatim.
+
+        ## Phase 3: Test Execution
+        Run the project's test suite (if any):
+        - Node: `npm test 2>&1` (or `npx vitest run`, `npx jest`)
+        - Python: `python -m pytest -v --tb=short 2>&1`
+        - Rust: `cargo test 2>&1`
+        - Swift: `swift test 2>&1`
+        - Go: `go test ./... 2>&1`
+
+        Report: total tests, passed, failed, skipped. Include first 20 lines of any failure output.
+
+        ## Phase 4: Browser Testing (if web app)
+        If the project is a web app (Node/Python/Ruby with a dev server):
+        1. Start the dev server in background: `npm run dev &` (or equivalent)
+        2. Wait 5 seconds for it to boot
+        3. Use Playwright MCP tools to test it:
+           - `browser_navigate` to `http://localhost:PORT`
+           - `browser_snapshot` to see the page structure
+           - `browser_take_screenshot` to capture what the page looks like
+           - Test basic navigation: click main links, check for errors
+        4. Output `[PREVIEW:http://localhost:PORT]` so the operator can see the app in the Review Ribbon
+        5. Stop the dev server when done: `kill %1`
+
+        Report: did the app boot? Did pages load? Any console errors? Include screenshot descriptions.
+        If Playwright MCP is not available, skip this phase.
 
         ## Output Format
         Return EXACTLY this structure (the brain parses it):
@@ -744,11 +795,22 @@ actor ClaudeCodeOrchestrator {
         Tech: {detected stack}
         Worktrees: {count} ({list with commit counts})
         PRDs: {count} ({story summary})
-        Issues: {any detected problems}
+
+        BUILD STATUS: {SUCCESS | FAILURE | SKIPPED}
+        Build output: {first 30 lines of build output, or "clean build"}
+        Build errors: {error lines, or "none"}
+
+        LAUNCH STATUS: {BOOTS | FAILS | SKIPPED}
+        Launch output: {first 10 lines, or "N/A"}
+
+        TEST STATUS: {X passed, Y failed, Z skipped | NO TESTS | SKIPPED}
+        Test failures: {failure details, first 20 lines per failure}
+
+        Issues: {any detected problems — build failures, missing deps, test failures, stale worktrees}
         Changes since last scan: {what's new}
         ```
 
-        Be concise. No opinions. Just facts.
+        Be concise. No opinions. Just facts. Errors must be verbatim — the brain and operator need exact messages.
         """
         try scannerContent.write(to: agentsDir.appendingPathComponent("scanner.md"), atomically: true, encoding: .utf8)
 
@@ -770,24 +832,47 @@ actor ClaudeCodeOrchestrator {
 
         # Commander — Slot Fleet Manager
 
-        You are the commander for **\(projectName)**. You decide what agents to launch.
+        You are the commander for **\(projectName)**. You decide what agents to launch based on evidence.
 
         ## Context
-        You receive a scanner report and an advisor recommendation. Based on these, you output [LAUNCH] commands.
+        You receive a scanner report (with build/test/launch results) and an advisor recommendation.
+        Your job: turn analysis into action via [LAUNCH] commands.
+
+        ## Decision Framework
+
+        ### If build FAILS:
+        - Launch 1 debugger slot: `[LAUNCH:claude:debug:Fix build errors — {paste exact error}]`
+        - Do NOT launch other slots until the build passes.
+
+        ### If tests FAIL:
+        - Launch 1 debugger slot with failing test names: `[LAUNCH:claude:debug:Fix failing tests — {test names and errors}]`
+        - If build passes but tests fail, also consider launching an implementer for missing functionality.
+
+        ### If build and tests PASS:
+        - Check PRD status. If stories remain, launch implementers for the next dependency layer.
+        - If no PRD, check if the scanner found issues (stale worktrees, missing docs, etc.) and act accordingly.
+
+        ### If no project exists yet:
+        - Do nothing. Report "Empty project — waiting for instructions."
 
         ## Protocol
         Output one or more [LAUNCH] commands:
         - `[LAUNCH:claude:backend:Implement US-001 to US-003 — core API routes]`
         - `[LAUNCH:gemini:testing:Write integration tests for all endpoints]`
+        - `[LAUNCH:claude:debug:Fix build error — cannot find module 'express']`
         - `[LAUNCH:claude:review:Review code quality and security]`
 
         ## Rules
         - Max 6 slots total. Check how many are already running before launching more.
-        - Match agent to task: claude for complex logic, gemini for testing/review, codex for simple tasks.
-        - Each slot needs a SPECIFIC task. Never launch a generic "work on project" slot.
-        - If nothing needs launching, say: "No action needed."
+        - Match agent to task: claude for complex logic, gemini for testing/review, codex for straightforward tasks.
+        - Each [LAUNCH] must include the SPECIFIC error or task. Copy-paste errors from the scanner report.
+        - Never launch a generic "work on project" slot.
+        - If nothing needs launching, say: "No action needed — project is healthy."
         - If PRD exists: map stories to slots by dependency layers.
-        - If no PRD: launch 1 analysis slot max unless there's a clear need for more.
+        - If no PRD and no issues: launch 1 analysis slot max.
+        - IMPORTANT: Every [LAUNCH] you output goes through the operator's approval ribbon.
+          The operator sees your proposal and can approve, reject, or modify before execution.
+          Be precise so the operator can make an informed decision.
         """
         try commanderContent.write(to: agentsDir.appendingPathComponent("commander.md"), atomically: true, encoding: .utf8)
 
@@ -954,8 +1039,8 @@ actor ClaudeCodeOrchestrator {
                 guard let text = block["text"] as? String else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Check for slot launch request: [LAUNCH:agent:role:task:branch]
-                // Brain decides to launch a new slot
+                // Check for slot launch request: [LAUNCH:agent:role:task]
+                // Routes through the approval ribbon — operator must approve before execution.
                 if trimmed.hasPrefix("[LAUNCH:") && trimmed.contains("]") {
                     let payload = String(trimmed.dropFirst(8).prefix(while: { $0 != "]" }))
                     let parts = payload.components(separatedBy: ":")
@@ -963,20 +1048,19 @@ actor ClaudeCodeOrchestrator {
                         let agent = parts[0].trimmingCharacters(in: .whitespaces)
                         let role = parts[1].trimmingCharacters(in: .whitespaces)
                         let task = parts[2...].joined(separator: ":").trimmingCharacters(in: .whitespaces)
+
+                        // Create a proposal instead of auto-launching
+                        let proposal = BrainProposal.fromLaunch(agentType: agent, role: role, task: task)
                         NotificationCenter.default.post(
-                            name: .brainRequestsSlotLaunch,
+                            name: .brainProposalReceived,
                             object: nil,
-                            userInfo: [
-                                "agentType": agent,
-                                "role": role,
-                                "task": task,
-                            ]
+                            userInfo: ["proposal": proposal]
                         )
-                        return (type: "decision", content: "Launching slot: \(agent) as \(role) — \(task)")
+                        return (type: "decision", content: "Proposal: launch \(agent) as \(role) — \(task) [awaiting approval]")
                     }
                 }
 
-                // Check for chat message: [CHAT] message → posts to chat panel
+                // Check for chat message: [CHAT] message → posts to chat panel (no approval needed)
                 if trimmed.hasPrefix("[CHAT]") {
                     let msg = String(trimmed.dropFirst(6)).trimmingCharacters(in: .whitespaces)
                     NotificationCenter.default.post(
@@ -988,14 +1072,32 @@ actor ClaudeCodeOrchestrator {
                 }
 
                 // Check for suite switch command: [SUITE:marketer]
+                // Routes through the approval ribbon.
                 if trimmed.hasPrefix("[SUITE:") && trimmed.contains("]") {
                     let suiteId = String(trimmed.dropFirst(7).prefix(while: { $0 != "]" }))
+                    let proposal = BrainProposal.fromSuiteSwitch(suiteId: suiteId)
                     NotificationCenter.default.post(
-                        name: .suiteSwitched,
+                        name: .brainProposalReceived,
                         object: nil,
-                        userInfo: ["suiteId": suiteId, "source": "brain"]
+                        userInfo: ["proposal": proposal]
                     )
-                    return (type: "decision", content: "Switching suite to \(suiteId)")
+                    return (type: "decision", content: "Proposal: switch to \(suiteId) suite [awaiting approval]")
+                }
+
+                // [PREVIEW:url] prefix → open URL in the Review Ribbon Preview tab
+                if trimmed.hasPrefix("[PREVIEW:") && trimmed.contains("]") {
+                    let url = String(trimmed.dropFirst(9).prefix(while: { $0 != "]" }))
+                    NotificationCenter.default.post(
+                        name: .previewURLReceived,
+                        object: nil,
+                        userInfo: ["url": url]
+                    )
+                    NotificationCenter.default.post(
+                        name: .cockpitBrainToChat,
+                        object: nil,
+                        userInfo: ["content": "Preview: opening \(url)", "role": "system"]
+                    )
+                    return (type: "action", content: "Preview: \(url)")
                 }
 
                 // Check for structured communication protocol prefixes
@@ -1033,12 +1135,48 @@ actor ClaudeCodeOrchestrator {
                     detail = "\(toolName) \(truncated)"
                 } else if let pattern = input["pattern"] as? String {
                     detail = "\(toolName) \(pattern)"
+                } else if let url = input["url"] as? String, toolName.contains("browser") {
+                    detail = "\(toolName) \(url)"
                 }
             }
             return (type: "action", content: detail)
 
         case "result":
+            // Check for base64 screenshot data from Playwright
+            if let resultContent = event["content"] as? [[String: Any]] {
+                for block in resultContent {
+                    if let type = block["type"] as? String, type == "image",
+                       let source = block["source"] as? [String: Any],
+                       let data = source["data"] as? String,
+                       let imageData = Data(base64Encoded: data) {
+                        // Broadcast screenshot for Agent Vision
+                        NotificationCenter.default.post(
+                            name: .agentScreenshotReceived,
+                            object: nil,
+                            userInfo: [
+                                "slotNumber": -1,  // brain slot
+                                "imageData": imageData,
+                            ]
+                        )
+                        return (type: "action", content: "Screenshot captured")
+                    }
+                }
+            }
             if let resultText = event["result"] as? String, !resultText.isEmpty {
+                // Also check for inline base64 PNG in text results
+                if resultText.hasPrefix("data:image/png;base64,") || resultText.hasPrefix("iVBOR") {
+                    let base64 = resultText.hasPrefix("data:image/png;base64,")
+                        ? String(resultText.dropFirst("data:image/png;base64,".count))
+                        : resultText
+                    if let imageData = Data(base64Encoded: base64) {
+                        NotificationCenter.default.post(
+                            name: .agentScreenshotReceived,
+                            object: nil,
+                            userInfo: ["slotNumber": -1, "imageData": imageData]
+                        )
+                        return (type: "action", content: "Screenshot captured")
+                    }
+                }
                 return (type: "thinking", content: resultText)
             }
             return nil

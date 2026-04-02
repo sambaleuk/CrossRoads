@@ -110,6 +110,7 @@ struct MainWindowView: View {
         ZStack {
             navigationContent
             commandPaletteOverlay
+            reviewRibbonOverlay
         }
     }
 
@@ -206,6 +207,29 @@ struct MainWindowView: View {
         }
     }
 
+    @ViewBuilder
+    private var reviewRibbonOverlay: some View {
+        if let cockpitVM = appState.cockpitViewModel, cockpitVM.showReviewRibbon {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        cockpitVM.showReviewRibbon = false
+                    }
+                }
+
+            VStack {
+                ReviewRibbonView(
+                    viewModel: cockpitVM,
+                    projectPath: appState.projectPath ?? ""
+                )
+                .frame(maxHeight: .infinity)
+            }
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: cockpitVM.showReviewRibbon)
+        }
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
@@ -247,6 +271,23 @@ struct MainWindowView: View {
         }
         .help("Toggle Cockpit Mode panel (⌘⇧C)")
         .keyboardShortcut("c", modifiers: [.command, .shift])
+
+        // Review Ribbon toggle
+        Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                if let cockpitVM = appState.cockpitViewModel {
+                    cockpitVM.showReviewRibbon.toggle()
+                }
+            }
+        } label: {
+            let hasPending = (appState.cockpitViewModel?.pendingProposals.count ?? 0) > 0
+            Label(
+                hasPending ? "Review (\(appState.cockpitViewModel?.pendingProposals.count ?? 0))" : "Review",
+                systemImage: hasPending ? "eye.badge.clock.fill" : "eye"
+            )
+        }
+        .help("Toggle Review Ribbon (⌘⇧R)")
+        .keyboardShortcut("r", modifiers: [.command, .shift])
 
         Button { showNewWorktreeSheet = true } label: {
             Label("Start Session", systemImage: "play.circle.fill")
