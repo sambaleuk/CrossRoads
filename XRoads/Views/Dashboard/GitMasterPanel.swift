@@ -582,9 +582,11 @@ struct ConflictRowView: View {
 
 struct ConflictDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appState) private var appState
     let conflict: GitConflict
 
     @State private var selectedStrategy: ResolutionStrategyType = .keepTheirs
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -711,8 +713,26 @@ struct ConflictDetailSheet: View {
     }
 
     private func applyResolution() {
-        // Apply resolution logic would go here
-        dismiss()
+        Task {
+            switch selectedStrategy {
+            case .keepOurs:
+                await appState.keepOurs(for: conflict.file)
+            case .keepTheirs:
+                await appState.keepTheirs(for: conflict.file)
+            case .combine, .reorder:
+                // AI merge / reorder not yet implemented — mark as resolved if user edited manually
+                await appState.markResolved(file: conflict.file)
+            case .defer_:
+                // Defer: do nothing, leave conflict for later
+                break
+            }
+            if let appError = appState.error {
+                errorMessage = appError.localizedDescription
+                appState.clearError()
+            } else {
+                dismiss()
+            }
+        }
     }
 }
 

@@ -117,12 +117,10 @@ actor MergeCoordinator {
                         message: stderr
                     )
                 )
-                // Abort the in-progress merge, then reset base to its pre-merge state
-                // to undo any branches already committed in this execution.
-                try? await gitService.abortMerge(repoPath: repoPath.path)
-                try? await gitService.resetHard(repoPath: repoPath.path, reference: baseHeadBefore)
-                mergedBranches.removeAll()
-                rolledBack = true
+                // Leave the merge in-progress so the user can resolve conflicts
+                // via Keep Ours / Keep Theirs / manual editing in the UI.
+                // Previously we aborted + reset here, which destroyed the merge
+                // state and made the resolution buttons no-ops.
                 break
             }
         }
@@ -134,6 +132,23 @@ actor MergeCoordinator {
             success: conflicts.isEmpty,
             rolledBack: rolledBack
         )
+    }
+
+    /// Commits the current in-progress merge after the user has resolved all conflicts.
+    /// Call this after Keep Ours / Keep Theirs / manual edits have been applied and staged.
+    func commitResolvedMerge(repoPath: URL, branch: String) async throws {
+        try await gitService.commit(
+            message: "Merge branch '\(branch)' — conflicts resolved manually",
+            repoPath: repoPath.path
+        )
+    }
+
+    /// Aborts the current in-progress merge and resets to the given ref (or HEAD).
+    func rollbackMerge(repoPath: URL, toRef: String? = nil) async throws {
+        try await gitService.abortMerge(repoPath: repoPath.path)
+        if let ref = toRef {
+            try await gitService.resetHard(repoPath: repoPath.path, reference: ref)
+        }
     }
 }
 

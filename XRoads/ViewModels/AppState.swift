@@ -1996,12 +1996,34 @@ final class AppState {
         }
     }
 
+    /// Commits the resolved merge after all conflicts have been handled.
+    func commitResolvedMerge() async {
+        guard let repo = orchestration.orchestrationRepoPath else { return }
+        // Determine the branch name from the first conflict (the one that triggered the merge failure)
+        let branchName = orchestration.unresolvedConflicts.first?.branch
+            ?? mergeResult?.conflicts.first?.branch
+            ?? "unknown"
+        do {
+            try await services.mergeCoordinator.commitResolvedMerge(repoPath: repo, branch: branchName)
+            await MainActor.run {
+                self.orchestration.clearConflicts()
+                self.addLog(LogEntry(level: .info, source: "merge", worktree: nil,
+                    message: "Merge committed after manual conflict resolution"))
+            }
+        } catch {
+            setError(.processError("Failed to commit merge: \(error.localizedDescription)"))
+        }
+    }
+
     func dismissConflictSheet() {
         orchestration.dismissConflictSheet()
     }
 
     private func resolveConflict(file: String, keepOurs: Bool) async {
-        guard let repo = orchestration.orchestrationRepoPath else { return }
+        guard let repo = orchestration.orchestrationRepoPath else {
+            setError(.processError("No repository path — cannot resolve conflict"))
+            return
+        }
         do {
             try await services.gitService.resolveConflict(
                 repoPath: repo.path,
