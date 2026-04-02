@@ -777,8 +777,15 @@ actor OrchestratorService {
                                 self.lastSessionId = sessionId
                                 Log.orchestrator.info("Captured session_id for resume: \(sessionId)")
                             }
+                            // Also extract result text if present (final message)
+                            if let result = event["result"] as? String, !result.isEmpty,
+                               responseContent.isEmpty {
+                                responseContent += result
+                                await self.delegate?.orchestratorDidReceiveChunk(self, chunk: result)
+                                self.updateMessage(id: responseMessage.id, content: responseContent)
+                            }
                         default:
-                            break
+                            Log.orchestrator.debug("Unhandled stream-json event type: \(type)")
                         }
                     }
                     // Fallback: if no JSON events parsed, treat as raw text (graceful degradation)
@@ -787,6 +794,31 @@ actor OrchestratorService {
                         if !trimmed.hasPrefix("{") {
                             responseContent += chunk
                             await self.delegate?.orchestratorDidReceiveChunk(self, chunk: chunk)
+                            self.updateMessage(id: responseMessage.id, content: responseContent)
+                        }
+                    }
+                }
+
+                // Flush remaining JSON buffer — the last line may lack a trailing newline
+                let remaining = jsonBuffer.flush()
+                for event in remaining {
+                    guard let type = event["type"] as? String else { continue }
+                    if type == "result" || type == "system" {
+                        if let sessionId = event["session_id"] as? String, !sessionId.isEmpty {
+                            self.lastSessionId = sessionId
+                            Log.orchestrator.info("Captured session_id from flush: \(sessionId)")
+                        }
+                        if let result = event["result"] as? String, !result.isEmpty,
+                           responseContent.isEmpty {
+                            responseContent += result
+                            await self.delegate?.orchestratorDidReceiveChunk(self, chunk: result)
+                            self.updateMessage(id: responseMessage.id, content: responseContent)
+                        }
+                    } else if type == "content_block_delta" {
+                        if let delta = event["delta"] as? [String: Any],
+                           let text = delta["text"] as? String {
+                            responseContent += text
+                            await self.delegate?.orchestratorDidReceiveChunk(self, chunk: text)
                             self.updateMessage(id: responseMessage.id, content: responseContent)
                         }
                     }
@@ -811,6 +843,12 @@ actor OrchestratorService {
                     break
                 }
             }
+
+            // Drain pending @MainActor yield tasks before finishing the stream.
+            // Output is delivered via Task { @MainActor in continuation.yield() },
+            // so we must ensure all pending yields land before signaling end-of-stream.
+            // MainActor's serial executor guarantees FIFO ordering.
+            await MainActor.run { }
 
             // Signal end of stream and wait for all chunks to be consumed
             continuation.finish()

@@ -1513,4 +1513,21 @@ final class JSONLineBuffer: @unchecked Sendable {
 
         return results
     }
+
+    /// Flushes any remaining content in the buffer (last line without trailing newline).
+    /// Call this after the stream ends to avoid losing the final JSON event.
+    func flush() -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let line = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        buffer = ""
+
+        guard !line.isEmpty,
+              let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
+        }
+        return [json]
+    }
 }

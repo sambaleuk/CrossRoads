@@ -396,8 +396,9 @@ actor ProcessRunner {
         managedProcess.isTerminated = true
         processes[id] = managedProcess
 
-        // Clean up handlers
-        managedProcess.stdoutPipe.fileHandleForReading.readabilityHandler = nil
-        managedProcess.stderrPipe.fileHandleForReading.readabilityHandler = nil
+        // NOTE: Do NOT remove readabilityHandlers here.
+        // The pipe may still have buffered data that hasn't been read yet.
+        // Handlers self-clean when they encounter EOF (empty availableData).
+        // Removing them prematurely causes the last output chunks to be lost.
     }
 }
