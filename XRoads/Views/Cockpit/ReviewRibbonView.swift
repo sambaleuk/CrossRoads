@@ -661,113 +661,120 @@ struct ReviewRibbonView: View {
     @ViewBuilder
     private var prdStorySidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // PRD selector (when multiple PRDs exist)
-            if appState.scannedPRDs.count > 1 {
-                VStack(alignment: .leading, spacing: 4) {
+            // PRD list header
+            if !appState.scannedPRDs.isEmpty {
+                HStack {
                     Text("PRDs (\(appState.scannedPRDs.count))")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color.textTertiary)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 4) {
-                            ForEach(appState.scannedPRDs) { prd in
-                                Button {
-                                    selectedScannedPRD = prd
-                                    selectedStory = nil
-                                } label: {
-                                    Text(prd.displayName)
-                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                        .lineLimit(1)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(selectedScannedPRD?.id == prd.id ? Color.accentPrimary.opacity(0.2) : Color.bgElevated)
-                                        .foregroundStyle(selectedScannedPRD?.id == prd.id ? Color.accentPrimary : Color.textSecondary)
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-                .padding(Theme.Spacing.sm)
-                Divider().background(Color.borderMuted)
-            } else if appState.scannedPRDs.count == 1 {
-                // Single PRD header
-                HStack {
-                    Text(appState.scannedPRDs[0].displayName)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Color.textPrimary)
-                        .lineLimit(1)
+                        .tracking(0.5)
                     Spacer()
+                    Button {
+                        Task { await appState.scanPRDs() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.textTertiary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .padding(Theme.Spacing.sm)
+                .padding(.horizontal, Theme.Spacing.sm)
+                .padding(.vertical, Theme.Spacing.xs)
+
                 Divider().background(Color.borderMuted)
             }
 
-            if let doc = selectedScannedPRD?.document ?? appState.scannedPRDs.first?.document {
-                // Progress bar
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("PROGRESS")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color.textTertiary)
-                        Spacer()
-                        Text("\(Int(doc.progress * 100))%")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color.statusSuccess)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.bgElevated)
-                                .frame(height: 4)
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.statusSuccess)
-                                .frame(width: geo.size.width * doc.progress, height: 4)
-                        }
-                    }
-                    .frame(height: 4)
-                    let completed = doc.userStories.filter { $0.status == .complete }.count
-                    Text("\(completed)/\(doc.userStories.count) stories")
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(Color.textTertiary)
-                }
-                .padding(Theme.Spacing.sm)
+            // PRD list + selected PRD stories
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    // PRD entries
+                    ForEach(appState.scannedPRDs) { prd in
+                        let isSelected = selectedScannedPRD?.id == prd.id
 
-                Divider().background(Color.borderMuted)
-
-                // Story list
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(doc.userStories) { story in
-                            Button {
-                                selectedStory = story
-                            } label: {
+                        Button {
+                            if isSelected {
+                                // Collapse
+                                selectedScannedPRD = nil
+                                selectedStory = nil
+                            } else {
+                                selectedScannedPRD = prd
+                                selectedStory = nil
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 0) {
                                 HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(storyStatusColor(story.status))
-                                        .frame(width: 6, height: 6)
-                                    Text(story.id)
-                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    Image(systemName: isSelected ? "chevron.down" : "chevron.right")
+                                        .font(.system(size: 8))
                                         .foregroundStyle(Color.textTertiary)
-                                    Text(story.title)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(selectedStory?.id == story.id ? Color.textPrimary : Color.textSecondary)
+                                        .frame(width: 10)
+
+                                    Circle()
+                                        .fill(prd.progress >= 1.0 ? Color.statusSuccess : Color.accentPrimary)
+                                        .frame(width: 6, height: 6)
+
+                                    Text(prd.displayName)
+                                        .font(.system(size: 10, weight: isSelected ? .bold : .medium, design: .monospaced))
+                                        .foregroundStyle(isSelected ? Color.textPrimary : Color.textSecondary)
                                         .lineLimit(1)
+
                                     Spacer()
-                                    priorityBadge(story.priority)
+
+                                    Text("\(prd.completedStories)/\(prd.document.userStories.count)")
+                                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(Color.textTertiary)
                                 }
                                 .padding(.horizontal, Theme.Spacing.sm)
-                                .padding(.vertical, 4)
-                                .background(selectedStory?.id == story.id ? Color.bgElevated : Color.clear)
-                                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
+                                .padding(.vertical, 5)
+                                .background(isSelected ? Color.bgElevated : Color.clear)
+
+                                // Progress bar
+                                GeometryReader { geo in
+                                    RoundedRectangle(cornerRadius: 1)
+                                        .fill(prd.progress >= 1.0 ? Color.statusSuccess.opacity(0.4) : Color.accentPrimary.opacity(0.3))
+                                        .frame(width: geo.size.width * prd.progress, height: 2)
+                                }
+                                .frame(height: 2)
                             }
-                            .buttonStyle(.plain)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Expanded: show stories for selected PRD
+                        if isSelected {
+                            ForEach(prd.document.userStories) { story in
+                                Button {
+                                    selectedStory = story
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(storyStatusColor(story.status))
+                                            .frame(width: 5, height: 5)
+                                        Text(story.id)
+                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(Color.textTertiary)
+                                        Text(story.title)
+                                            .font(.system(size: 9, design: .monospaced))
+                                            .foregroundStyle(selectedStory?.id == story.id ? Color.textPrimary : Color.textSecondary)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        priorityBadge(story.priority)
+                                    }
+                                    .padding(.leading, 28)
+                                    .padding(.trailing, Theme.Spacing.sm)
+                                    .padding(.vertical, 3)
+                                    .background(selectedStory?.id == story.id ? Color.accentPrimary.opacity(0.1) : Color.clear)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Divider()
+                                .background(Color.borderMuted)
+                                .padding(.vertical, 2)
                         }
                     }
-                    .padding(.horizontal, Theme.Spacing.xs)
-                    .padding(.vertical, Theme.Spacing.xs)
                 }
-            } else {
+            }
+
+            if appState.scannedPRDs.isEmpty {
                 VStack(spacing: Theme.Spacing.sm) {
                     Spacer()
                     if appState.isScanning {
