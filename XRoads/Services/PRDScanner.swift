@@ -123,20 +123,42 @@ actor PRDScanner {
 
     // MARK: - Private
 
-    /// Recursively finds all prd.json files under the given root.
+    /// Recursively finds all prd*.json files under the given root.
     private func findPRDFiles(root: URL) -> [URL] {
         let fm = FileManager.default
         var found: [URL] = []
 
+        // First pass: check root directory directly (fast, avoids enumerator issues)
+        if let rootContents = try? fm.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) {
+            for fileURL in rootContents {
+                let name = fileURL.lastPathComponent.lowercased()
+                if name.hasPrefix(targetPrefix) && name.hasSuffix(".\(targetExtension)") {
+                    found.append(fileURL)
+                }
+            }
+        }
+
+        // Second pass: recurse into subdirectories
         guard let enumerator = fm.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isDirectoryKey, .nameKey],
+            includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
+            logger.warning("Failed to create enumerator for \(root.path, privacy: .public)")
             return found
         }
 
+        // Track root-level files already found to avoid duplicates
+        let rootPaths = Set(found.map(\.path))
+
         for case let fileURL as URL in enumerator {
+            // Skip files already found at root level
+            if rootPaths.contains(fileURL.path) { continue }
+
             let name = fileURL.lastPathComponent
 
             // Skip excluded directories
@@ -146,13 +168,14 @@ actor PRDScanner {
                 continue
             }
 
-            // Match prd*.json (prd.json, prd-feature.json, prd-v2.json, etc.)
+            // Match prd*.json
             let lower = name.lowercased()
             if lower.hasPrefix(targetPrefix) && lower.hasSuffix(".\(targetExtension)") {
                 found.append(fileURL)
             }
         }
 
+        logger.info("findPRDFiles found \(found.count) file(s) under \(root.path, privacy: .public)")
         return found
     }
 }

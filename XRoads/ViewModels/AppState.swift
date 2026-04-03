@@ -2151,13 +2151,21 @@ final class AppState {
 
     /// Scans the project directory for all prd.json files and updates scannedPRDs.
     func scanPRDs() async {
-        guard let path = projectPath, !path.isEmpty else { return }
+        guard let path = projectPath, !path.isEmpty else {
+            addLog(LogEntry(level: .warn, source: "prd-scan", worktree: nil,
+                message: "No project path set — cannot scan for PRDs"))
+            return
+        }
         isScanning = true
+        addLog(LogEntry(level: .info, source: "prd-scan", worktree: nil,
+            message: "Scanning for PRDs in \(path)..."))
         let scanner = PRDScanner()
         let results = await scanner.scan(projectPath: path)
         await MainActor.run {
             self.scannedPRDs = results
             self.isScanning = false
+            self.addLog(LogEntry(level: .info, source: "prd-scan", worktree: nil,
+                message: "Found \(results.count) PRD(s): \(results.map(\.displayName).joined(separator: ", "))"))
         }
     }
 
