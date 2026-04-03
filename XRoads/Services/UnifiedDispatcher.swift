@@ -159,6 +159,7 @@ enum DispatchSource: String, Sendable {
     case startAllButton // Dashboard "Start All" button
     case chat           // OrchestratorChatView
     case quickAction    // GitInfoPanel quick action
+    case cockpitBrain   // Brain auto-dispatch after cycle
     case api            // External API (future)
 }
 

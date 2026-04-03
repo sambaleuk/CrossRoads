@@ -424,6 +424,21 @@ final class AppState {
                     Task { await self.services.historyService.append(record: record) }
                 }
 
+                // Listen for brain cycle completion → dispatch pending PRD stories to slots
+                NotificationCenter.default.addObserver(
+                    forName: .brainCycleDidComplete,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let projectPath = notification.userInfo?["projectPath"] as? String
+                    else { return }
+
+                    Task { @MainActor in
+                        await self.handleBrainCycleDispatch(projectPath: projectPath)
+                    }
+                }
+
                 await vm.activate(projectPath: path, suiteId: self.activeSuiteId)
             } catch {
                 self.error = .unknown("Cockpit bootstrap failed: \(error.localizedDescription)")
@@ -678,6 +693,12 @@ final class AppState {
 
     var activePRDURL: URL? { orchestration.activePRDURL }
     var activePRDName: String? { orchestration.activePRDName }
+
+    /// All PRDs discovered in the project by the scanner
+    var scannedPRDs: [ScannedPRD] = []
+
+    /// Whether a PRD scan is currently running
+    var isScanning: Bool = false
 
     var recoveredOrchestration: RecoveredOrchestration? {
         get { orchestration.recoveredOrchestration }
@@ -1963,6 +1984,183 @@ final class AppState {
         orchestration.clearPendingPRDURL()
     }
 
+    // MARK: - Brain Cycle → Slot Dispatch
+
+    /// Whether a brain-triggered dispatch is already in progress (prevents double-dispatch)
+    private var brainDispatchInProgress = false
+
+    /// Called after each brain cycle completes. Checks for pending PRD stories
+    /// and dispatches them to visible terminal slots via UnifiedDispatcher.
+    /// This is the key bridge: brain observes → this method acts → hexagons light up.
+    func handleBrainCycleDispatch(projectPath: String) async {
+        // Guard: don't dispatch if already dispatching, or if slots are already running
+        guard !brainDispatchInProgress else {
+            addLog(LogEntry(level: .debug, source: "brain-dispatch", worktree: nil,
+                message: "Dispatch already in progress — skipping"))
+            return
+        }
+
+        let runningSlots = terminalSlots.filter { $0.status == .running || $0.status == .starting }
+        guard runningSlots.isEmpty else {
+            addLog(LogEntry(level: .debug, source: "brain-dispatch", worktree: nil,
+                message: "\(runningSlots.count) slot(s) already running — skipping dispatch"))
+            return
+        }
+
+        // Rescan PRDs to get fresh state
+        await scanPRDs()
+
+        // Find a PRD with pending stories
+        guard let prd = scannedPRDs.first(where: { $0.pendingStories > 0 }) else {
+            addLog(LogEntry(level: .debug, source: "brain-dispatch", worktree: nil,
+                message: "No PRDs with pending stories — nothing to dispatch"))
+            return
+        }
+
+        let pendingStories = prd.document.userStories.filter { $0.status != .complete }
+        guard !pendingStories.isEmpty else { return }
+
+        brainDispatchInProgress = true
+        let repoPath = URL(fileURLWithPath: projectPath)
+
+        addLog(LogEntry(level: .info, source: "brain-dispatch", worktree: nil,
+            message: "Brain dispatching \(pendingStories.count) pending stories from \"\(prd.displayName)\""))
+
+        // Assign stories to available slots (round-robin, max 3 slots)
+        let maxSlots = min(3, pendingStories.count)
+        var slotAssignments: [Int: (agentType: AgentType, actionType: ActionType, storyIds: [String])] = [:]
+
+        for (i, story) in pendingStories.enumerated() {
+            let slotNumber = (i % maxSlots) + 1
+            if slotAssignments[slotNumber] == nil {
+                // Pick agent based on story complexity
+                let agentType: AgentType = story.estimatedComplexity > 5 ? .claude : .claude
+                slotAssignments[slotNumber] = (agentType: agentType, actionType: .implement, storyIds: [])
+            }
+            slotAssignments[slotNumber]!.storyIds.append(story.id)
+        }
+
+        // Configure terminal slots visually before dispatch
+        for (slotNumber, assignment) in slotAssignments {
+            if let idx = terminalSlots.firstIndex(where: { $0.slotNumber == slotNumber }) {
+                terminalSlots[idx].agentType = assignment.agentType
+                terminalSlots[idx].actionType = assignment.actionType
+                terminalSlots[idx].status = .configuring
+                terminalSlots[idx].currentTask = "Brain: \(assignment.storyIds.joined(separator: ", "))"
+            }
+        }
+        currentPRD = prd.document
+        orchestrationRepoPath = repoPath
+        updateOrchestratorVisualState()
+
+        // Build dispatch request using the same UnifiedDispatcher path as SlotAssignmentSheet
+        let request = DispatchRequest.prd(
+            prd: prd.document,
+            slotAssignments: slotAssignments,
+            repoPath: repoPath,
+            source: .cockpitBrain
+        )
+
+        let callbacks = DispatchCallbacks(
+            onProgress: { [weak self] progress in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.dispatchPhase = progress.phase
+                    self.dispatchMessage = progress.message
+                    self.dispatchProgress = progress
+                }
+            },
+            onSlotUpdate: { [weak self] info in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let index = self.terminalSlots.firstIndex(where: { $0.slotNumber == info.slotNumber }) {
+                        self.terminalSlots[index].agentType = info.agentType
+                        switch info.status {
+                        case .pending:
+                            self.terminalSlots[index].status = .configuring
+                        case .worktreeCreated:
+                            self.terminalSlots[index].status = .ready
+                        case .launching:
+                            self.terminalSlots[index].status = .starting
+                        case .running:
+                            self.terminalSlots[index].status = .running
+                            self.terminalSlots[index].processId = info.processId
+                            self.terminalSlots[index].worktree = Worktree(
+                                path: info.worktreePath.path,
+                                branch: info.branchName
+                            )
+                        case .completed:
+                            self.terminalSlots[index].status = .completed
+                        case .failed:
+                            self.terminalSlots[index].status = .error
+                        }
+                    }
+                    self.updateOrchestratorVisualState()
+                }
+            },
+            onSlotOutput: { [weak self] slotNumber, output in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.appendSlotOutput(slotNumber: slotNumber, output: output)
+                }
+            },
+            onSlotTermination: { [weak self] slotNumber, exitCode in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.handleSlotTermination(slotNumber: slotNumber, exitCode: exitCode)
+                }
+            },
+            onLog: { [weak self] entry in
+                Task { @MainActor [weak self] in
+                    self?.addLog(entry)
+                }
+            },
+            onComplete: { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.brainDispatchInProgress = false
+                    self.dispatchPhase = .completed
+                    self.dispatchMessage = "All stories completed!"
+                    self.orchestratorVisualState = .celebrating
+                    self.addLog(LogEntry(level: .info, source: "brain-dispatch", worktree: nil,
+                        message: "Brain dispatch completed — all stories done"))
+                    await self.completeOrchestration()
+                }
+            },
+            onError: { [weak self] error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.brainDispatchInProgress = false
+                    self.dispatchPhase = .failed
+                    self.dispatchMessage = "Dispatch failed: \(error.localizedDescription)"
+                    self.addLog(LogEntry(level: .error, source: "brain-dispatch", worktree: nil,
+                        message: "Brain dispatch failed: \(error.localizedDescription)"))
+                }
+            }
+        )
+
+        // Dispatch via UnifiedDispatcher — this creates worktrees, launches loops, updates hexagons
+        do {
+            _ = try await services.unifiedDispatcher.dispatch(request, callbacks: callbacks)
+        } catch {
+            brainDispatchInProgress = false
+            addLog(LogEntry(level: .error, source: "brain-dispatch", worktree: nil,
+                message: "UnifiedDispatcher error: \(error.localizedDescription)"))
+        }
+    }
+
+    /// Scans the project directory for all prd.json files and updates scannedPRDs.
+    func scanPRDs() async {
+        guard let path = projectPath, !path.isEmpty else { return }
+        isScanning = true
+        let scanner = PRDScanner()
+        let results = await scanner.scan(projectPath: path)
+        await MainActor.run {
+            self.scannedPRDs = results
+            self.isScanning = false
+        }
+    }
+
     func presentConflicts(from result: MergeResult, repoPath: URL) {
         orchestration.presentConflicts(from: result, repoPath: repoPath)
     }
@@ -2147,6 +2345,9 @@ final class AppState {
         let repoURL = URL(fileURLWithPath: path)
         let recovery = await services.orchestrationRecovery.checkForRecovery(repoPath: repoURL)
         await MainActor.run { self.orchestration.recoveredOrchestration = recovery }
+
+        // Scan for all PRDs in the project
+        await scanPRDs()
 
         // Auto-activate cockpit brain on project switch
         // Close previous session if exists, then bootstrap fresh

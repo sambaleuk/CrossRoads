@@ -9,8 +9,8 @@ struct ChairmanInput: Codable, Hashable, Sendable {
     /// Recent git commit entries (last N commits)
     let gitLog: [GitLogEntry]
 
-    /// Summary of the active PRD (feature name, status, pending stories)
-    let prdSummary: PRDSummary?
+    /// All PRD summaries discovered in the project (replaces single prdSummary)
+    let prdSummaries: [PRDSummary]
 
     /// Currently open branches in the project
     let openBranches: [String]
@@ -26,6 +26,15 @@ struct ChairmanInput: Codable, Hashable, Sendable {
 
     /// Timestamp of context collection
     let collectedAt: Date
+
+    /// Backward-compatible accessor: returns the first PRD summary (if any).
+    var prdSummary: PRDSummary? { prdSummaries.first }
+
+    // Codable: exclude the computed prdSummary from coding
+    private enum CodingKeys: String, CodingKey {
+        case gitLog, prdSummaries, openBranches, lastSession
+        case projectPath, suiteId, collectedAt
+    }
 }
 
 // MARK: - GitLogEntry
@@ -43,7 +52,7 @@ struct GitLogEntry: Codable, Hashable, Sendable, Identifiable {
 
 // MARK: - PRDSummary
 
-/// Summary of the active PRD for Chairman deliberation
+/// Summary of a PRD for Chairman deliberation
 struct PRDSummary: Codable, Hashable, Sendable {
     let featureName: String
     let status: String

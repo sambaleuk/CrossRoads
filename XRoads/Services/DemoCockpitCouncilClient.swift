@@ -21,14 +21,17 @@ final class DemoCockpitCouncilClient: CockpitCouncilClientProtocol, @unchecked S
         let storyCount: Int
         let featureName: String
 
-        if let prd = input.prdSummary {
+        if let prd = input.prdSummaries.first {
             featureName = prd.featureName
-            storyCount = prd.totalStories
-            let pendingCount = prd.pendingStories
+            storyCount = input.prdSummaries.reduce(0) { $0 + $1.totalStories }
+            let totalPending = input.prdSummaries.reduce(0) { $0 + $1.pendingStories }
+            let prdLines = input.prdSummaries.map { p in
+                "- \(p.featureName): \(p.totalStories) stories (\(p.pendingStories) pending) — \(p.status)"
+            }
             prdContext = """
-                **PRD**: \(prd.featureName)
-                Stories: \(storyCount) total, \(pendingCount) pending
-                Status: \(prd.status)
+                **PRDs** (\(input.prdSummaries.count)):
+                \(prdLines.joined(separator: "\n"))
+                Total: \(storyCount) stories, \(totalPending) pending
                 """
         } else {
             featureName = projectName

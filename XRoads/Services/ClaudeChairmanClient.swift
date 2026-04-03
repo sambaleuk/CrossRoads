@@ -23,14 +23,17 @@ final class ClaudeChairmanClient: CockpitCouncilClientProtocol, @unchecked Senda
         let commitCount = input.gitLog.count
         let recentAuthors = Set(input.gitLog.prefix(10).map { $0.author }).joined(separator: ", ")
 
-        // PRD analysis
-        var prdSection = "No active PRD detected."
+        // PRD analysis — include all discovered PRDs
+        var prdSection = "No PRDs detected in project."
         var storyCount = 0
         var pendingCount = 0
-        if let prd = input.prdSummary {
-            storyCount = prd.totalStories
-            pendingCount = prd.pendingStories
-            prdSection = "PRD: \(prd.featureName) — \(storyCount) stories (\(pendingCount) pending, \(prd.completedStories) done)"
+        if !input.prdSummaries.isEmpty {
+            let lines = input.prdSummaries.map { prd in
+                "- **\(prd.featureName)**: \(prd.totalStories) stories (\(prd.pendingStories) pending, \(prd.completedStories) done) — \(prd.status)"
+            }
+            prdSection = "PRDs (\(input.prdSummaries.count)):\n\(lines.joined(separator: "\n"))"
+            storyCount = input.prdSummaries.reduce(0) { $0 + $1.totalStories }
+            pendingCount = input.prdSummaries.reduce(0) { $0 + $1.pendingStories }
         }
 
         // Domain detection from branches + commits

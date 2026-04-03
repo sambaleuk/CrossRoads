@@ -86,6 +86,11 @@ extension Notification.Name {
     /// UserInfo: "agentType" (String), "role" (String), "task" (String)
     static let brainRequestsSlotLaunch = Notification.Name("brainRequestsSlotLaunch")
 
+    /// Posted after a brain cycle completes successfully.
+    /// AppState listens and dispatches pending PRD stories to visible slots.
+    /// UserInfo: "projectPath" (String)
+    static let brainCycleDidComplete = Notification.Name("brainCycleDidComplete")
+
     /// Posted when a cockpit session closes with an OrchestrationRecord ready for persistence.
     /// UserInfo: "record" (OrchestrationRecord)
     static let cockpitSessionRecordReady = Notification.Name("cockpitSessionRecordReady")

@@ -70,12 +70,12 @@ actor ProjectContextReader {
         // Read all context in parallel
         async let gitLog = readGitLog(projectPath: projectPath)
         async let branches = readOpenBranches(projectPath: projectPath)
-        async let prd = readPRDSummary(projectPath: projectPath)
+        async let prdSummaries = scanAllPRDSummaries(projectPath: projectPath)
         async let lastSession = readLastSession(projectPath: projectPath)
 
         return try await ChairmanInput(
             gitLog: gitLog,
-            prdSummary: prd,
+            prdSummaries: prdSummaries,
             openBranches: branches,
             lastSession: lastSession,
             projectPath: projectPath,
@@ -112,39 +112,11 @@ actor ProjectContextReader {
             .filter { !$0.isEmpty }
     }
 
-    /// Reads and summarizes the active PRD JSON if present
-    private func readPRDSummary(projectPath: String) async -> PRDSummary? {
-        let prdPath = (projectPath as NSString).appendingPathComponent("prd.json")
-        guard FileManager.default.fileExists(atPath: prdPath),
-              let data = FileManager.default.contents(atPath: prdPath) else {
-            return nil
-        }
-
-        do {
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            guard let json else { return nil }
-
-            let featureName = json["feature_name"] as? String ?? "Unknown"
-            let status = json["status"] as? String ?? "unknown"
-            let branch = json["branch"] as? String
-
-            let stories = json["user_stories"] as? [[String: Any]] ?? []
-            let totalStories = stories.count
-            let completedStories = stories.filter { ($0["status"] as? String) == "complete" }.count
-            let pendingStories = totalStories - completedStories
-
-            return PRDSummary(
-                featureName: featureName,
-                status: status,
-                branch: branch,
-                totalStories: totalStories,
-                pendingStories: pendingStories,
-                completedStories: completedStories
-            )
-        } catch {
-            logger.warning("Failed to parse PRD at \(prdPath, privacy: .public): \(error.localizedDescription)")
-            return nil
-        }
+    /// Scans the project for all prd.json files and returns their summaries.
+    private func scanAllPRDSummaries(projectPath: String) async -> [PRDSummary] {
+        let scanner = PRDScanner()
+        let scanned = await scanner.scan(projectPath: projectPath)
+        return scanned.map { $0.toSummary() }
     }
 
     /// Reads the most recent cockpit session for this project

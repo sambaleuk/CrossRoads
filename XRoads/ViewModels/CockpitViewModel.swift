@@ -795,17 +795,24 @@ final class CockpitViewModel {
                 await startCockpitBrain(projectPath: session.projectPath)
             }
         } else {
-            // Normal exit: brain completed its scan. Go to SLEEP.
-            // Brain will be woken by events (slot launch, slot terminate, etc.)
-            // or by the safety net timer.
+            // Normal exit: brain completed its scan.
+            // Notify AppState so it can dispatch pending PRD stories to slots.
             self.brainRestartCount = 0
-            logger.info("Brain cycle complete — sleeping until next event")
+            logger.info("Brain cycle complete — checking for dispatchable work")
             NotificationCenter.default.post(
                 name: .cockpitBrainOutput,
                 object: nil,
-                userInfo: ["type": "loop", "content": "Cycle done. Sleeping until next event.", "timestamp": Date()]
+                userInfo: ["type": "loop", "content": "Cycle done. Checking for pending stories to dispatch...", "timestamp": Date()]
             )
-            // No auto-restart — wakeBrain() will be called by events
+
+            // Signal AppState to dispatch pending work to visible slots
+            if let projectPath = session?.projectPath {
+                NotificationCenter.default.post(
+                    name: .brainCycleDidComplete,
+                    object: nil,
+                    userInfo: ["projectPath": projectPath]
+                )
+            }
         }
     }
 

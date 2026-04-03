@@ -56,10 +56,11 @@ final class ConductorTests: XCTestCase {
 
         let chairmanInput = ChairmanInput(
             gitLog: [],
-            prdSummary: nil,
+            prdSummaries: [],
             openBranches: ["main"],
             lastSession: nil,
             projectPath: session.projectPath,
+            suiteId: nil,
             collectedAt: Date()
         )
 
@@ -112,10 +113,11 @@ final class ConductorTests: XCTestCase {
 
         let chairmanInput = ChairmanInput(
             gitLog: [],
-            prdSummary: nil,
+            prdSummaries: [],
             openBranches: ["main"],
             lastSession: nil,
             projectPath: session.projectPath,
+            suiteId: nil,
             collectedAt: Date()
         )
 
@@ -159,10 +161,11 @@ final class ConductorTests: XCTestCase {
 
         let chairmanInput = ChairmanInput(
             gitLog: [],
-            prdSummary: nil,
+            prdSummaries: [],
             openBranches: ["main"],
             lastSession: nil,
             projectPath: session.projectPath,
+            suiteId: nil,
             collectedAt: Date()
         )
 
@@ -199,10 +202,11 @@ final class ConductorTests: XCTestCase {
 
         let chairmanInput = ChairmanInput(
             gitLog: [],
-            prdSummary: nil,
+            prdSummaries: [],
             openBranches: ["main"],
             lastSession: nil,
             projectPath: session.projectPath,
+            suiteId: nil,
             collectedAt: Date()
         )
 
@@ -282,10 +286,11 @@ final class ConductorTests: XCTestCase {
 
         let chairmanInput = ChairmanInput(
             gitLog: [],
-            prdSummary: nil,
+            prdSummaries: [],
             openBranches: ["main"],
             lastSession: nil,
             projectPath: session.projectPath,
+            suiteId: nil,
             collectedAt: Date()
         )
 
@@ -328,10 +333,11 @@ final class ConductorTests: XCTestCase {
 
         let chairmanInput = ChairmanInput(
             gitLog: [],
-            prdSummary: nil,
+            prdSummaries: [],
             openBranches: ["main"],
             lastSession: nil,
             projectPath: session.projectPath,
+            suiteId: nil,
             collectedAt: Date()
         )
 
