@@ -153,6 +153,10 @@ actor LayeredDispatcher {
             )
             emitProgress("Status file at \(statusFilePath?.lastPathComponent ?? "unknown")")
 
+            // Persist the full PRD to the project root so the scanner, chairman,
+            // and kanban can always find it — even after app restart.
+            persistFullPRD(prd, to: repoPath)
+
             // Phase 2: Create all worktrees upfront
             emitProgress("Phase 2/6: Creating \(slotAssignments.count) worktrees...")
             try await createAllWorktrees(slotAssignments: slotAssignments)
@@ -248,6 +252,36 @@ actor LayeredDispatcher {
     /// Get current dispatch state
     func getState() -> (phase: DispatchPhase, slots: [SlotLaunchInfo]) {
         return (currentPhase, Array(slotInfos.values))
+    }
+
+    // MARK: - Private: PRD Persistence
+
+    /// Writes the full PRD document to the project root.
+    /// Uses the pattern `prd-<sanitized-name>.json` to match the scanner's expectations.
+    /// Skips if a matching PRD file already exists at root.
+    private func persistFullPRD(_ prd: PRDDocument, to repoPath: URL) {
+        let sanitized = prd.featureName
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+            .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        let fileName = sanitized.isEmpty ? "prd.json" : "prd-\(sanitized).json"
+        let prdURL = repoPath.appendingPathComponent(fileName)
+
+        // Don't overwrite if it already exists (might have updated statuses)
+        guard !FileManager.default.fileExists(atPath: prdURL.path) else {
+            Log.dispatcher.debug("PRD already on disk: \(fileName)")
+            return
+        }
+
+        do {
+            let json = try prd.toJSON()
+            try json.write(to: prdURL, atomically: true, encoding: .utf8)
+            Log.dispatcher.info("Persisted full PRD to \(fileName) (\(prd.userStories.count) stories)")
+            emitProgress("Saved PRD to \(fileName)")
+        } catch {
+            Log.dispatcher.warning("Failed to persist PRD: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private: Worktree Creation

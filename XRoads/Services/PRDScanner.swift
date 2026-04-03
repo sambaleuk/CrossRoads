@@ -231,21 +231,22 @@ actor PRDScanner {
                     storiesByID[storyId] = story
                 }
             } else {
-                // Story only in status.json — create placeholder
-                var placeholder = PRDUserStory(
+                // Story only in status.json — awaiting dispatch (worktree not yet created).
+                // Create a minimal entry so the kanban shows all stories with accurate statuses.
+                var entry = PRDUserStory(
                     id: storyId,
-                    title: storyId,
-                    description: "",
+                    title: "Story \(storyId)",
+                    description: "Awaiting dispatch — details available when worktree is created",
                     priority: .medium,
-                    status: PRDStoryStatus(rawValue: live.status.rawValue) ?? .pending,
+                    status: live.status,
                     acceptanceCriteria: [],
                     dependsOn: [],
                     estimatedComplexity: 3
                 )
                 if live.status == .complete {
-                    placeholder.completedAt = live.completedAt
+                    entry.completedAt = live.completedAt
                 }
-                storiesByID[storyId] = placeholder
+                storiesByID[storyId] = entry
             }
         }
 
