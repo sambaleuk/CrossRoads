@@ -11,12 +11,13 @@ import WebKit
 /// - **Approval mode**: Brain proposals (launches, suite switches, decisions) with approve/reject/modify.
 struct ReviewRibbonView: View {
     @Bindable var viewModel: CockpitViewModel
+    @Environment(\.appState) private var appState
     let projectPath: String
 
     @State private var selectedTab: RibbonTab = .proposals
     @State private var rootNode: TreeNode?
     @State private var selectedFile: TreeNode?
-    @State private var prdDocument: PRDDocument?
+    @State private var selectedScannedPRD: ScannedPRD?
     @State private var selectedStory: PRDUserStory?
     @State private var fileContent: String = ""
     @State private var oldFileContent: String = ""  // git HEAD version for split diff
@@ -65,6 +66,11 @@ struct ReviewRibbonView: View {
             loadPRD()
             if !viewModel.pendingProposals.isEmpty {
                 selectedTab = .proposals
+            }
+        }
+        .onChange(of: appState.scannedPRDs.count) { _, newCount in
+            if newCount > 0 && selectedScannedPRD == nil {
+                selectedScannedPRD = appState.scannedPRDs.first
             }
         }
     }
@@ -511,57 +517,60 @@ struct ReviewRibbonView: View {
     // MARK: - Data Loading
 
     private func loadFileTree() {
-        Task {
-            do {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
-                process.arguments = [
-                    projectPath, "-maxdepth", "4",
-                    "-not", "-path", "*/.*",
-                    "-not", "-path", "*/node_modules/*",
-                    "-not", "-path", "*/.build/*",
-                    "-not", "-path", "*/target/*",
-                    "-not", "-path", "*/__pycache__/*",
-                ]
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = Pipe()
-                try process.run()
-                process.waitUntilExit()
+        let path = projectPath
+        Task.detached {
+            // Run `find` on background thread to avoid blocking the main thread
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/find")
+            process.arguments = [
+                path, "-maxdepth", "4",
+                "-not", "-path", "*/.*",
+                "-not", "-path", "*/node_modules/*",
+                "-not", "-path", "*/.build/*",
+                "-not", "-path", "*/target/*",
+                "-not", "-path", "*/__pycache__/*",
+            ]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
 
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let output = String(data: data, encoding: .utf8) ?? ""
-                let paths = output.components(separatedBy: "\n")
-                    .filter { !$0.isEmpty && $0 != projectPath }
-                    .sorted()
+            do { try process.run() } catch { return }
+            process.waitUntilExit()
 
-                // Build hierarchical tree
-                let root = TreeNode(name: URL(fileURLWithPath: projectPath).lastPathComponent, isDirectory: true)
-                root.fullPath = projectPath
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            let paths = output.components(separatedBy: "\n")
+                .filter { !$0.isEmpty && $0 != path }
+                .sorted()
+
+            // Collect file metadata on background thread (no TreeNode yet)
+            struct FileEntry { let fullPath: String; let relativePath: String; let isDirectory: Bool }
+            var entries: [FileEntry] = []
+            for filePath in paths.prefix(500) {
+                let relativePath = String(filePath.dropFirst(path.count + 1))
+                var isDir: ObjCBool = false
+                FileManager.default.fileExists(atPath: filePath, isDirectory: &isDir)
+                entries.append(FileEntry(fullPath: filePath, relativePath: relativePath, isDirectory: isDir.boolValue))
+            }
+
+            // Build TreeNode on MainActor (TreeNode is @MainActor-isolated)
+            let snapshot = entries
+            await MainActor.run {
+                let root = TreeNode(name: URL(fileURLWithPath: path).lastPathComponent, isDirectory: true)
+                root.fullPath = path
                 root.relativePath = ""
 
-                for path in paths.prefix(500) {
-                    let relativePath = String(path.dropFirst(projectPath.count + 1))
-                    var isDir: ObjCBool = false
-                    FileManager.default.fileExists(atPath: path, isDirectory: &isDir)
-                    root.insertPath(components: relativePath.components(separatedBy: "/"),
-                                    fullPath: path,
-                                    relativePath: relativePath,
-                                    isDirectory: isDir.boolValue)
+                for entry in snapshot {
+                    root.insertPath(components: entry.relativePath.components(separatedBy: "/"),
+                                    fullPath: entry.fullPath,
+                                    relativePath: entry.relativePath,
+                                    isDirectory: entry.isDirectory)
                 }
 
-                // Compact single-child directories
                 root.compact()
-                // Sort: dirs first, then alpha
                 root.sortRecursive()
-                // Auto-expand first 2 levels
                 root.expandToDepth(2)
-
-                await MainActor.run {
-                    rootNode = root
-                }
-            } catch {
-                // Silent fail
+                self.rootNode = root
             }
         }
     }
@@ -595,10 +604,11 @@ struct ReviewRibbonView: View {
     }
 
     private func loadGitInfo() {
-        Task {
-            let branch = runGit(["-C", projectPath, "branch", "--show-current"])?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let lastCommit = runGit(["-C", projectPath, "log", "--oneline", "-1"])?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let statusOutput = runGit(["-C", projectPath, "status", "--porcelain"]) ?? ""
+        let path = projectPath
+        Task.detached {
+            let branch = Self.runGitDetached(["-C", path, "branch", "--show-current"])?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let lastCommit = Self.runGitDetached(["-C", path, "log", "--oneline", "-1"])?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let statusOutput = Self.runGitDetached(["-C", path, "status", "--porcelain"]) ?? ""
 
             let modified = Set(
                 statusOutput.components(separatedBy: "\n")
@@ -613,9 +623,9 @@ struct ReviewRibbonView: View {
             )
 
             await MainActor.run {
-                gitBranch = branch
-                gitLastCommit = lastCommit
-                modifiedFiles = modified
+                self.gitBranch = branch
+                self.gitLastCommit = lastCommit
+                self.modifiedFiles = modified
             }
         }
     }
@@ -624,24 +634,13 @@ struct ReviewRibbonView: View {
     // MARK: - PRD Loading
 
     private func loadPRD() {
-        Task {
-            // Scan for prd*.json in project root
-            let fm = FileManager.default
-            guard let entries = try? fm.contentsOfDirectory(atPath: projectPath) else { return }
-            let prdFiles = entries.filter { $0.hasPrefix("prd") && $0.hasSuffix(".json") }.sorted()
-            guard let prdFile = prdFiles.first else { return }
-
-            let prdPath = URL(fileURLWithPath: projectPath).appendingPathComponent(prdFile)
-            do {
-                let doc = try await PRDParser().parse(fileURL: prdPath)
-                await MainActor.run { prdDocument = doc }
-            } catch {
-                // Try raw JSON decode as fallback
-                if let data = fm.contents(atPath: prdPath.path),
-                   let doc = try? JSONDecoder().decode(PRDDocument.self, from: data) {
-                    await MainActor.run { prdDocument = doc }
-                }
-            }
+        // Trigger a scan if not already done
+        if appState.scannedPRDs.isEmpty {
+            Task { await appState.scanPRDs() }
+        }
+        // Auto-select the first PRD if available
+        if selectedScannedPRD == nil, let first = appState.scannedPRDs.first {
+            selectedScannedPRD = first
         }
     }
 
@@ -650,7 +649,49 @@ struct ReviewRibbonView: View {
     @ViewBuilder
     private var prdStorySidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let doc = prdDocument {
+            // PRD selector (when multiple PRDs exist)
+            if appState.scannedPRDs.count > 1 {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PRDs (\(appState.scannedPRDs.count))")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.textTertiary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(appState.scannedPRDs) { prd in
+                                Button {
+                                    selectedScannedPRD = prd
+                                    selectedStory = nil
+                                } label: {
+                                    Text(prd.displayName)
+                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(selectedScannedPRD?.id == prd.id ? Color.accentPrimary.opacity(0.2) : Color.bgElevated)
+                                        .foregroundStyle(selectedScannedPRD?.id == prd.id ? Color.accentPrimary : Color.textSecondary)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(Theme.Spacing.sm)
+                Divider().background(Color.borderMuted)
+            } else if appState.scannedPRDs.count == 1 {
+                // Single PRD header
+                HStack {
+                    Text(appState.scannedPRDs[0].displayName)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(Theme.Spacing.sm)
+                Divider().background(Color.borderMuted)
+            }
+
+            if let doc = selectedScannedPRD?.document ?? appState.scannedPRDs.first?.document {
                 // Progress bar
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -717,15 +758,28 @@ struct ReviewRibbonView: View {
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     Spacer()
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 24))
-                        .foregroundStyle(Color.textTertiary.opacity(0.4))
-                    Text("No PRD found")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Color.textTertiary)
-                    Text("Place a prd*.json in project root")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(Color.textTertiary.opacity(0.6))
+                    if appState.isScanning {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Scanning...")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                    } else {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 24))
+                            .foregroundStyle(Color.textTertiary.opacity(0.4))
+                        Text("No PRD found")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color.textTertiary)
+                        Button {
+                            Task { await appState.scanPRDs() }
+                        } label: {
+                            Label("Scan project", systemImage: "arrow.clockwise")
+                                .font(.system(size: 10))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -738,7 +792,7 @@ struct ReviewRibbonView: View {
 
     @ViewBuilder
     private var prdVisualizerContent: some View {
-        if let doc = prdDocument {
+        if let doc = selectedScannedPRD?.document ?? appState.scannedPRDs.first?.document {
             VStack(spacing: 0) {
                 // Header: feature name + description
                 HStack {
@@ -1093,6 +1147,11 @@ struct ReviewRibbonView: View {
     }
 
     private func runGit(_ arguments: [String]) -> String? {
+        Self.runGitDetached(arguments)
+    }
+
+    /// Static version callable from `Task.detached` (no actor isolation needed).
+    private static func runGitDetached(_ arguments: [String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = arguments
@@ -1112,6 +1171,7 @@ struct ReviewRibbonView: View {
 
 // MARK: - TreeNode — Hierarchical file tree model
 
+@MainActor
 final class TreeNode: Identifiable, ObservableObject {
     let id = UUID()
     var name: String
