@@ -24,7 +24,7 @@ final class UpdaterService {
     /// The appcast URL — defaults to GitHub releases, overridable via env var
     static let appcastURL: String = {
         ProcessInfo.processInfo.environment["XROADS_APPCAST_URL"]
-            ?? "https://github.com/Nexus-Neurogrid/XRoads/releases/latest/download/appcast.xml"
+            ?? "https://github.com/sambaleuk/CrossRoads/releases/latest/download/appcast.xml"
     }()
 
     init() {

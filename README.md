@@ -143,8 +143,8 @@ The bar: does it help ship code faster?
 
 ## License
 
-TBD
+Apache License 2.0 — see [LICENSE](LICENSE) for details.
 
 ---
 
-Built by [Neurogrid](https://neurogrid.me). Code-shipped, not setup-porned.
+Built by [Neurogrid](https://neurogrid.me) — Open source under Apache 2.0.

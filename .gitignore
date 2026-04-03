@@ -157,3 +157,13 @@ ios-swift-skills/
 progress.txt
 kill-app.sh
 .crossroads/
+
+# -----------------------------------------------------------------------------
+# Open-source cleanup — proprietary & personal
+# -----------------------------------------------------------------------------
+dist/
+worktrees/
+COMPETITIVE_GAP_ANALYSIS*.md
+skills/ops/
+XRoads/Resources/cockpit-soul.md
+989E4EC2-*.jpeg

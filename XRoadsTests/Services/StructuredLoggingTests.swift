@@ -218,8 +218,8 @@ final class StructuredLoggingTests: XCTestCase {
 
         // Fallback: try common paths
         let candidates = [
-            "/Users/birahimmbow/Projets/CrossRoads",
-            NSHomeDirectory() + "/Projets/CrossRoads"
+            NSHomeDirectory() + "/Projets/CrossRoads",
+            "/tmp/test-project"
         ]
         for candidate in candidates {
             let packagePath = (candidate as NSString).appendingPathComponent("Package.swift")
