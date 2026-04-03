@@ -73,8 +73,9 @@ actor PRDScanner {
         "__pycache__", ".venv", "venv"
     ]
 
-    /// File name to scan for
-    private let targetFileName = "prd.json"
+    /// File name prefix to match (prd.json, prd-feature.json, etc.)
+    private let targetPrefix = "prd"
+    private let targetExtension = "json"
 
     /// Scans the given project root for all prd.json files.
     /// - Parameter projectPath: Absolute path to the project root
@@ -111,8 +112,9 @@ actor PRDScanner {
 
         // Sort: root prd.json first, then alphabetically by path
         results.sort { a, b in
-            if a.relativePath == targetFileName { return true }
-            if b.relativePath == targetFileName { return false }
+            let aIsRoot = !a.relativePath.contains("/")
+            let bIsRoot = !b.relativePath.contains("/")
+            if aIsRoot != bIsRoot { return aIsRoot }
             return a.relativePath < b.relativePath
         }
 
@@ -144,8 +146,9 @@ actor PRDScanner {
                 continue
             }
 
-            // Match prd.json (case-insensitive)
-            if name.lowercased() == targetFileName {
+            // Match prd*.json (prd.json, prd-feature.json, prd-v2.json, etc.)
+            let lower = name.lowercased()
+            if lower.hasPrefix(targetPrefix) && lower.hasSuffix(".\(targetExtension)") {
                 found.append(fileURL)
             }
         }
