@@ -634,13 +634,25 @@ struct ReviewRibbonView: View {
     // MARK: - PRD Loading
 
     private func loadPRD() {
-        // Trigger a scan if not already done
-        if appState.scannedPRDs.isEmpty {
-            Task { await appState.scanPRDs() }
+        // Ensure projectPath is set on appState (ReviewRibbon receives it directly)
+        if (appState.projectPath ?? "").isEmpty && !projectPath.isEmpty {
+            Task { @MainActor in
+                appState.projectPath = projectPath
+            }
         }
-        // Auto-select the first PRD if available
-        if selectedScannedPRD == nil, let first = appState.scannedPRDs.first {
-            selectedScannedPRD = first
+        // Trigger a scan — always, to get fresh results
+        Task {
+            // Use the local projectPath as fallback if appState.projectPath is nil
+            let scanPath = appState.projectPath ?? projectPath
+            guard !scanPath.isEmpty else { return }
+            if appState.projectPath == nil {
+                appState.projectPath = scanPath
+            }
+            await appState.scanPRDs()
+            // Auto-select the first PRD
+            if selectedScannedPRD == nil, let first = appState.scannedPRDs.first {
+                selectedScannedPRD = first
+            }
         }
     }
 

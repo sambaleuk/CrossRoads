@@ -57,6 +57,10 @@ struct PRDLoaderSheet: View {
         .onAppear {
             loadInitialPRDIfNeeded()
             prefillRepoPath()
+            // Trigger PRD scan if not done yet
+            if appState.scannedPRDs.isEmpty {
+                Task { await appState.scanPRDs() }
+            }
         }
         .onDisappear {
             appState.setActivePRD(url: nil, name: nil)
