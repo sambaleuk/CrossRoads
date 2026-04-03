@@ -106,10 +106,12 @@ actor PRDScanner {
         let allWorktreeURLs = worktreeURLs + siblingPRDURLs
         logger.info("Main PRDs: \(mainURLs.count), Worktree PRDs: \(allWorktreeURLs.count)")
 
-        // 4. Parse worktree PRDs to collect story statuses
+        // 4. Parse worktree PRDs to collect story statuses AND full stories
         var worktreeStatuses: [String: (status: PRDStoryStatus, completedAt: Date?)] = [:]
+        var worktreeDocs: [PRDDocument] = []
         for url in allWorktreeURLs {
             if let doc = try? await parser.parse(fileURL: url) {
+                worktreeDocs.append(doc)
                 for story in doc.userStories {
                     let existing = worktreeStatuses[story.id]
                     if existing == nil || (existing!.status.isLessThan(story.status)) {
@@ -119,17 +121,36 @@ actor PRDScanner {
             }
         }
         if !worktreeStatuses.isEmpty {
-            logger.info("Collected \(worktreeStatuses.count) story statuses from worktree PRDs")
+            logger.info("Collected \(worktreeStatuses.count) story statuses from \(worktreeDocs.count) worktree PRD(s)")
         }
 
         // 5. Also load statuses from .crossroads/status.json (loop script sync)
         let statusFileStatuses = loadStatusFile(projectRoot: rootURL)
 
-        // 6. Parse main PRDs, merge all status sources, and write back to disk
+        // 6. If no main PRDs found but worktree PRDs exist, reconstruct
+        //    a combined main PRD from worktrees and persist it to disk.
+        var effectiveMainURLs = mainURLs
+        if mainURLs.isEmpty && !worktreeDocs.isEmpty {
+            logger.info("No main PRD found — reconstructing from \(worktreeDocs.count) worktree PRD(s)")
+            if let reconstructed = reconstructMainPRD(from: worktreeDocs, statusFileStatuses: statusFileStatuses) {
+                let sanitized = reconstructed.featureName
+                    .lowercased()
+                    .replacingOccurrences(of: " ", with: "-")
+                    .replacingOccurrences(of: "/", with: "-")
+                    .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+                let fileName = sanitized.isEmpty ? "prd.json" : "prd-\(sanitized).json"
+                let prdURL = rootURL.appendingPathComponent(fileName)
+                persistUpdatedPRD(reconstructed, to: prdURL)
+                effectiveMainURLs = [prdURL]
+                logger.info("Reconstructed and persisted main PRD: \(fileName)")
+            }
+        }
+
+        // 7. Parse main PRDs, merge all status sources, and write back to disk
         var results: [ScannedPRD] = []
         let hasLiveUpdates = !worktreeStatuses.isEmpty || !statusFileStatuses.isEmpty
 
-        for url in mainURLs {
+        for url in effectiveMainURLs {
             do {
                 let originalDoc = try await parser.parse(fileURL: url)
                 let mergedDoc = mergeAllStatuses(
@@ -139,7 +160,6 @@ actor PRDScanner {
                 )
 
                 // Write back to disk if any statuses were upgraded
-                // This keeps the PRD file as the single source of truth
                 if hasLiveUpdates && mergedDoc != originalDoc {
                     persistUpdatedPRD(mergedDoc, to: url)
                 }
@@ -170,6 +190,76 @@ actor PRDScanner {
         }
 
         return results
+    }
+
+    // MARK: - Reconstruction
+
+    /// Reconstructs a full main PRD from multiple worktree PRDs.
+    /// Each worktree contains a filtered PRD (only its assigned stories).
+    /// This combines all stories, deduplicates by ID, and applies status.json statuses.
+    private func reconstructMainPRD(
+        from worktreeDocs: [PRDDocument],
+        statusFileStatuses: [String: (status: PRDStoryStatus, completedAt: Date?)]
+    ) -> PRDDocument? {
+        guard let first = worktreeDocs.first else { return nil }
+
+        // Collect all stories from all worktree PRDs, deduplicate by ID
+        var storiesByID: [String: PRDUserStory] = [:]
+        for doc in worktreeDocs {
+            for story in doc.userStories {
+                if let existing = storiesByID[story.id] {
+                    // Keep the most advanced status
+                    if existing.status.isLessThan(story.status) {
+                        storiesByID[story.id] = story
+                    }
+                } else {
+                    storiesByID[story.id] = story
+                }
+            }
+        }
+
+        // Apply status.json statuses on top — also create placeholder stories
+        // for IDs that exist in status.json but not in any worktree PRD
+        for (storyId, live) in statusFileStatuses {
+            if var story = storiesByID[storyId] {
+                // Story exists — upgrade status if needed
+                if story.status.isLessThan(live.status) {
+                    story.status = live.status
+                    if live.status == .complete {
+                        story.completedAt = live.completedAt
+                    }
+                    storiesByID[storyId] = story
+                }
+            } else {
+                // Story only in status.json — create placeholder
+                var placeholder = PRDUserStory(
+                    id: storyId,
+                    title: storyId,
+                    description: "",
+                    priority: .medium,
+                    status: PRDStoryStatus(rawValue: live.status.rawValue) ?? .pending,
+                    acceptanceCriteria: [],
+                    dependsOn: [],
+                    estimatedComplexity: 3
+                )
+                if live.status == .complete {
+                    placeholder.completedAt = live.completedAt
+                }
+                storiesByID[storyId] = placeholder
+            }
+        }
+
+        // Sort stories by ID for consistent ordering
+        let allStories = storiesByID.values.sorted { $0.id < $1.id }
+
+        return PRDDocument(
+            featureName: first.featureName,
+            description: first.description,
+            author: first.author,
+            templateType: first.templateType,
+            userStories: allStories,
+            vision: first.vision
+        )
     }
 
     // MARK: - Write-Back
