@@ -424,7 +424,7 @@ final class AppState {
                     Task { await self.services.historyService.append(record: record) }
                 }
 
-                // Listen for brain cycle completion → dispatch pending PRD stories to slots
+                // Listen for brain cycle completion → propose pending PRD stories
                 NotificationCenter.default.addObserver(
                     forName: .brainCycleDidComplete,
                     object: nil,
@@ -437,6 +437,22 @@ final class AppState {
                     Task { @MainActor in
                         await self.handleBrainCycleDispatch(projectPath: projectPath)
                     }
+                }
+
+                // Listen for brain PRD approval → open PRD loader for slot assignment
+                NotificationCenter.default.addObserver(
+                    forName: .brainPRDApproved,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] notification in
+                    guard let self = self,
+                          let prdPath = notification.userInfo?["prdPath"] as? String
+                    else { return }
+
+                    let url = URL(fileURLWithPath: prdPath)
+                    self.pendingPRDURL = url
+                    self.addLog(LogEntry(level: .info, source: "brain", worktree: nil,
+                        message: "PRD approved — opening slot assignment for \(url.lastPathComponent)"))
                 }
 
                 await vm.activate(projectPath: path, suiteId: self.activeSuiteId)
@@ -1984,168 +2000,50 @@ final class AppState {
         orchestration.clearPendingPRDURL()
     }
 
-    // MARK: - Brain Cycle → Slot Dispatch
-
-    /// Whether a brain-triggered dispatch is already in progress (prevents double-dispatch)
-    private var brainDispatchInProgress = false
+    // MARK: - Brain Cycle → PRD Proposal
 
     /// Called after each brain cycle completes. Checks for pending PRD stories
-    /// and dispatches them to visible terminal slots via UnifiedDispatcher.
-    /// This is the key bridge: brain observes → this method acts → hexagons light up.
+    /// and sends a BrainProposal to the Review Ribbon for operator approval.
+    /// The operator decides when and how to dispatch — no auto-launch.
     func handleBrainCycleDispatch(projectPath: String) async {
-        // Guard: don't dispatch if already dispatching, or if slots are already running
-        guard !brainDispatchInProgress else {
-            addLog(LogEntry(level: .debug, source: "brain-dispatch", worktree: nil,
-                message: "Dispatch already in progress — skipping"))
-            return
-        }
-
+        // Don't propose if slots are already running
         let runningSlots = terminalSlots.filter { $0.status == .running || $0.status == .starting }
-        guard runningSlots.isEmpty else {
-            addLog(LogEntry(level: .debug, source: "brain-dispatch", worktree: nil,
-                message: "\(runningSlots.count) slot(s) already running — skipping dispatch"))
-            return
-        }
+        guard runningSlots.isEmpty else { return }
 
         // Rescan PRDs to get fresh state
         await scanPRDs()
 
-        // Find a PRD with pending stories
-        guard let prd = scannedPRDs.first(where: { $0.pendingStories > 0 }) else {
-            addLog(LogEntry(level: .debug, source: "brain-dispatch", worktree: nil,
-                message: "No PRDs with pending stories — nothing to dispatch"))
+        // Find PRDs with pending stories and propose each one
+        let pendingPRDs = scannedPRDs.filter { $0.pendingStories > 0 }
+
+        guard !pendingPRDs.isEmpty else {
+            addLog(LogEntry(level: .debug, source: "brain", worktree: nil,
+                message: "No PRDs with pending stories"))
             return
         }
 
-        let pendingStories = prd.document.userStories.filter { $0.status != .complete }
-        guard !pendingStories.isEmpty else { return }
-
-        brainDispatchInProgress = true
-        let repoPath = URL(fileURLWithPath: projectPath)
-
-        addLog(LogEntry(level: .info, source: "brain-dispatch", worktree: nil,
-            message: "Brain dispatching \(pendingStories.count) pending stories from \"\(prd.displayName)\""))
-
-        // Assign stories to available slots (round-robin, max 3 slots)
-        let maxSlots = min(3, pendingStories.count)
-        var slotAssignments: [Int: (agentType: AgentType, actionType: ActionType, storyIds: [String])] = [:]
-
-        for (i, story) in pendingStories.enumerated() {
-            let slotNumber = (i % maxSlots) + 1
-            if slotAssignments[slotNumber] == nil {
-                // Pick agent based on story complexity
-                let agentType: AgentType = story.estimatedComplexity > 5 ? .claude : .claude
-                slotAssignments[slotNumber] = (agentType: agentType, actionType: .implement, storyIds: [])
-            }
-            slotAssignments[slotNumber]!.storyIds.append(story.id)
+        // Check if we already have a pending PRD proposal (avoid spamming)
+        if let vm = cockpitViewModel {
+            let hasPendingPRDProposal = vm.pendingProposals.values.contains { $0.type == .prd }
+            guard !hasPendingPRDProposal else { return }
         }
 
-        // Configure terminal slots visually before dispatch
-        for (slotNumber, assignment) in slotAssignments {
-            if let idx = terminalSlots.firstIndex(where: { $0.slotNumber == slotNumber }) {
-                terminalSlots[idx].agentType = assignment.agentType
-                terminalSlots[idx].actionType = assignment.actionType
-                terminalSlots[idx].status = .configuring
-                terminalSlots[idx].currentTask = "Brain: \(assignment.storyIds.joined(separator: ", "))"
-            }
-        }
-        currentPRD = prd.document
-        orchestrationRepoPath = repoPath
-        updateOrchestratorVisualState()
+        for prd in pendingPRDs {
+            let proposal = BrainProposal.fromPRD(
+                featureName: prd.displayName,
+                pendingCount: prd.pendingStories,
+                totalCount: prd.document.userStories.count,
+                prdPath: prd.fileURL.path
+            )
 
-        // Build dispatch request using the same UnifiedDispatcher path as SlotAssignmentSheet
-        let request = DispatchRequest.prd(
-            prd: prd.document,
-            slotAssignments: slotAssignments,
-            repoPath: repoPath,
-            source: .cockpitBrain
-        )
+            NotificationCenter.default.post(
+                name: .brainProposalReceived,
+                object: nil,
+                userInfo: ["proposal": proposal]
+            )
 
-        let callbacks = DispatchCallbacks(
-            onProgress: { [weak self] progress in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.dispatchPhase = progress.phase
-                    self.dispatchMessage = progress.message
-                    self.dispatchProgress = progress
-                }
-            },
-            onSlotUpdate: { [weak self] info in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    if let index = self.terminalSlots.firstIndex(where: { $0.slotNumber == info.slotNumber }) {
-                        self.terminalSlots[index].agentType = info.agentType
-                        switch info.status {
-                        case .pending:
-                            self.terminalSlots[index].status = .configuring
-                        case .worktreeCreated:
-                            self.terminalSlots[index].status = .ready
-                        case .launching:
-                            self.terminalSlots[index].status = .starting
-                        case .running:
-                            self.terminalSlots[index].status = .running
-                            self.terminalSlots[index].processId = info.processId
-                            self.terminalSlots[index].worktree = Worktree(
-                                path: info.worktreePath.path,
-                                branch: info.branchName
-                            )
-                        case .completed:
-                            self.terminalSlots[index].status = .completed
-                        case .failed:
-                            self.terminalSlots[index].status = .error
-                        }
-                    }
-                    self.updateOrchestratorVisualState()
-                }
-            },
-            onSlotOutput: { [weak self] slotNumber, output in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.appendSlotOutput(slotNumber: slotNumber, output: output)
-                }
-            },
-            onSlotTermination: { [weak self] slotNumber, exitCode in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.handleSlotTermination(slotNumber: slotNumber, exitCode: exitCode)
-                }
-            },
-            onLog: { [weak self] entry in
-                Task { @MainActor [weak self] in
-                    self?.addLog(entry)
-                }
-            },
-            onComplete: { [weak self] in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.brainDispatchInProgress = false
-                    self.dispatchPhase = .completed
-                    self.dispatchMessage = "All stories completed!"
-                    self.orchestratorVisualState = .celebrating
-                    self.addLog(LogEntry(level: .info, source: "brain-dispatch", worktree: nil,
-                        message: "Brain dispatch completed — all stories done"))
-                    await self.completeOrchestration()
-                }
-            },
-            onError: { [weak self] error in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.brainDispatchInProgress = false
-                    self.dispatchPhase = .failed
-                    self.dispatchMessage = "Dispatch failed: \(error.localizedDescription)"
-                    self.addLog(LogEntry(level: .error, source: "brain-dispatch", worktree: nil,
-                        message: "Brain dispatch failed: \(error.localizedDescription)"))
-                }
-            }
-        )
-
-        // Dispatch via UnifiedDispatcher — this creates worktrees, launches loops, updates hexagons
-        do {
-            _ = try await services.unifiedDispatcher.dispatch(request, callbacks: callbacks)
-        } catch {
-            brainDispatchInProgress = false
-            addLog(LogEntry(level: .error, source: "brain-dispatch", worktree: nil,
-                message: "UnifiedDispatcher error: \(error.localizedDescription)"))
+            addLog(LogEntry(level: .info, source: "brain", worktree: nil,
+                message: "PRD proposal: \(prd.displayName) — \(prd.pendingStories) pending stories"))
         }
     }
 

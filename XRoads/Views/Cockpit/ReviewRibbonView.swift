@@ -2134,6 +2134,7 @@ struct ProposalSidebarItem: View {
         switch proposal.type {
         case .launch: return "play.circle.fill"
         case .suite: return "square.stack.3d.up.fill"
+        case .prd: return "doc.text.fill"
         case .decision: return "brain.head.profile"
         case .alert: return "exclamationmark.triangle.fill"
         }
@@ -2278,6 +2279,7 @@ struct ProposalDetailCard: View {
         switch proposal.type {
         case .launch: return "play.circle.fill"
         case .suite: return "square.stack.3d.up.fill"
+        case .prd: return "doc.text.fill"
         case .decision: return "brain.head.profile"
         case .alert: return "exclamationmark.triangle.fill"
         }

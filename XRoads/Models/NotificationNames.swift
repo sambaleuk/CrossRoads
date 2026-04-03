@@ -87,9 +87,14 @@ extension Notification.Name {
     static let brainRequestsSlotLaunch = Notification.Name("brainRequestsSlotLaunch")
 
     /// Posted after a brain cycle completes successfully.
-    /// AppState listens and dispatches pending PRD stories to visible slots.
+    /// AppState listens and checks for pending PRD stories to propose.
     /// UserInfo: "projectPath" (String)
     static let brainCycleDidComplete = Notification.Name("brainCycleDidComplete")
+
+    /// Posted when operator approves a PRD proposal from the brain.
+    /// AppState listens and opens the PRD loader/slot assignment flow.
+    /// UserInfo: "prdPath" (String) — absolute path to the prd.json
+    static let brainPRDApproved = Notification.Name("brainPRDApproved")
 
     /// Posted when a cockpit session closes with an OrchestrationRecord ready for persistence.
     /// UserInfo: "record" (OrchestrationRecord)

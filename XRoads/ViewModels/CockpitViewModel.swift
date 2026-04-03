@@ -958,6 +958,16 @@ final class CockpitViewModel {
                 )
             }
 
+        case .prd:
+            // PRD approved — notify AppState to open SlotAssignment with this PRD
+            if let prdPath = proposal.prdPath {
+                NotificationCenter.default.post(
+                    name: .brainPRDApproved,
+                    object: nil,
+                    userInfo: ["prdPath": prdPath]
+                )
+            }
+
         case .decision, .alert:
             // Acknowledged — notify brain
             NotificationCenter.default.post(

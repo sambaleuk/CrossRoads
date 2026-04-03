@@ -6,6 +6,7 @@ import Foundation
 enum BrainProposalType: String, Codable, Hashable, Sendable {
     case launch       // [LAUNCH:agent:role:task] — spawn a new agent slot
     case suite        // [SUITE:id] — switch active suite
+    case prd          // PRD dispatch — brain found pending stories to dispatch to slots
     case decision     // [DECISION] — strategic decision requiring confirmation
     case alert        // [ALERT] — critical alert requiring acknowledgment
 }
@@ -40,6 +41,10 @@ struct BrainProposal: Codable, Identifiable, Hashable, Sendable {
     // [SUITE]-specific fields
     var suiteId: String?            // Target suite ID
 
+    // [PRD]-specific fields
+    var prdPath: String?            // Absolute path to the prd.json file
+    var pendingStoryCount: Int?     // Number of pending stories in the PRD
+
     // Context from scanner/advisor
     var scannerExcerpt: String?     // Relevant part of scanner report
     var advisorRationale: String?   // Advisor's reasoning
@@ -59,6 +64,8 @@ struct BrainProposal: Codable, Identifiable, Hashable, Sendable {
         role: String? = nil,
         task: String? = nil,
         suiteId: String? = nil,
+        prdPath: String? = nil,
+        pendingStoryCount: Int? = nil,
         scannerExcerpt: String? = nil,
         advisorRationale: String? = nil,
         createdAt: Date = Date(),
@@ -75,6 +82,8 @@ struct BrainProposal: Codable, Identifiable, Hashable, Sendable {
         self.role = role
         self.task = task
         self.suiteId = suiteId
+        self.prdPath = prdPath
+        self.pendingStoryCount = pendingStoryCount
         self.scannerExcerpt = scannerExcerpt
         self.advisorRationale = advisorRationale
         self.createdAt = createdAt
@@ -103,6 +112,18 @@ struct BrainProposal: Codable, Identifiable, Hashable, Sendable {
             agentType: agentType,
             role: role,
             task: task
+        )
+    }
+
+    /// Create a proposal to dispatch a PRD with pending stories to slots.
+    static func fromPRD(featureName: String, pendingCount: Int, totalCount: Int, prdPath: String) -> BrainProposal {
+        BrainProposal(
+            type: .prd,
+            title: "Dispatch: \(featureName)",
+            detail: "\(pendingCount)/\(totalCount) stories pending — ready to dispatch to slots.",
+            riskLevel: .low,
+            prdPath: prdPath,
+            pendingStoryCount: pendingCount
         )
     }
 
