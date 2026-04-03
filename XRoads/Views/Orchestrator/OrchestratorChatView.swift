@@ -589,6 +589,22 @@ struct OrchestratorChatView: View {
             userStories: stories
         )
 
+        // Persist PRD to disk so the scanner, chairman brief, and kanban can find it.
+        // File name: prd-<sanitized-feature-name>.json at project root.
+        if let projectPath = appState.projectPath {
+            let sanitized = featureName
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "-")
+                .replacingOccurrences(of: "/", with: "-")
+                .filter { $0.isLetter || $0.isNumber || $0 == "-" }
+            let fileName = sanitized.isEmpty ? "prd.json" : "prd-\(sanitized).json"
+            let prdURL = URL(fileURLWithPath: projectPath).appendingPathComponent(fileName)
+            if let json = try? document.toJSON() {
+                try? json.write(to: prdURL, atomically: true, encoding: .utf8)
+                appState.setActivePRD(url: prdURL, name: featureName)
+            }
+        }
+
         withAnimation { viewModel.dismissPRDProposal() }
         prdDocumentForSlotAssignment = document
     }

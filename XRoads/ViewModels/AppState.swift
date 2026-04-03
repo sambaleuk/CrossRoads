@@ -2048,6 +2048,7 @@ final class AppState {
     }
 
     /// Scans the project directory for all prd.json files and updates scannedPRDs.
+    /// Also includes the active dispatch PRD if one exists (in-memory or from activePRDURL).
     func scanPRDs() async {
         guard let path = projectPath, !path.isEmpty else {
             addLog(LogEntry(level: .warn, source: "prd-scan", worktree: nil,
@@ -2058,7 +2059,33 @@ final class AppState {
         addLog(LogEntry(level: .info, source: "prd-scan", worktree: nil,
             message: "Scanning for PRDs in \(path)..."))
         let scanner = PRDScanner()
-        let results = await scanner.scan(projectPath: path)
+        var results = await scanner.scan(projectPath: path)
+
+        // If an active PRD exists (from dispatch) but wasn't found by the file scanner,
+        // parse it directly and include it. This bridges the gap between the dispatch
+        // system (in-memory) and the scanner (disk-based).
+        if let activeURL = activePRDURL {
+            let alreadyFound = results.contains { $0.fileURL.path == activeURL.path }
+            if !alreadyFound {
+                let parser = PRDParser()
+                if let doc = try? await parser.parse(fileURL: activeURL) {
+                    let relativePath = activeURL.path.replacingOccurrences(
+                        of: path + "/", with: ""
+                    )
+                    let scanned = ScannedPRD(
+                        id: UUID(),
+                        fileURL: activeURL,
+                        document: doc,
+                        relativePath: relativePath,
+                        discoveredAt: Date()
+                    )
+                    results.insert(scanned, at: 0) // Active PRD first
+                    addLog(LogEntry(level: .info, source: "prd-scan", worktree: nil,
+                        message: "Included active dispatch PRD: \(doc.featureName)"))
+                }
+            }
+        }
+
         await MainActor.run {
             self.scannedPRDs = results
             self.isScanning = false

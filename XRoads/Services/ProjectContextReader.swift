@@ -54,7 +54,7 @@ actor ProjectContextReader {
     /// - Parameter projectPath: Path to the project directory (must be a valid git repo)
     /// - Throws: ProjectContextReaderError if the project is invalid
     /// - Returns: ChairmanInput ready for Chairman deliberation
-    func readContext(projectPath: String) async throws -> ChairmanInput {
+    func readContext(projectPath: String, activePRDURL: URL? = nil) async throws -> ChairmanInput {
         // Validate project path
         guard FileManager.default.fileExists(atPath: projectPath) else {
             throw ProjectContextReaderError.invalidProjectPath(projectPath)
@@ -70,7 +70,7 @@ actor ProjectContextReader {
         // Read all context in parallel
         async let gitLog = readGitLog(projectPath: projectPath)
         async let branches = readOpenBranches(projectPath: projectPath)
-        async let prdSummaries = scanAllPRDSummaries(projectPath: projectPath)
+        async let prdSummaries = scanAllPRDSummaries(projectPath: projectPath, activePRDURL: activePRDURL)
         async let lastSession = readLastSession(projectPath: projectPath)
 
         return try await ChairmanInput(
@@ -113,9 +113,33 @@ actor ProjectContextReader {
     }
 
     /// Scans the project for all prd.json files and returns their summaries.
-    private func scanAllPRDSummaries(projectPath: String) async -> [PRDSummary] {
+    /// If an activePRDURL is provided and not already found by the scanner,
+    /// it is parsed and included — bridging the dispatch system with the scanner.
+    private func scanAllPRDSummaries(projectPath: String, activePRDURL: URL? = nil) async -> [PRDSummary] {
         let scanner = PRDScanner()
-        let scanned = await scanner.scan(projectPath: projectPath)
+        var scanned = await scanner.scan(projectPath: projectPath)
+
+        // Include the active dispatch PRD if it wasn't found by the file scanner
+        if let activeURL = activePRDURL {
+            let alreadyFound = scanned.contains { $0.fileURL.path == activeURL.path }
+            if !alreadyFound {
+                let parser = PRDParser()
+                if let doc = try? await parser.parse(fileURL: activeURL) {
+                    let relativePath = activeURL.path.replacingOccurrences(
+                        of: projectPath + "/", with: ""
+                    )
+                    scanned.insert(ScannedPRD(
+                        id: UUID(),
+                        fileURL: activeURL,
+                        document: doc,
+                        relativePath: relativePath,
+                        discoveredAt: Date()
+                    ), at: 0)
+                    logger.info("Included active dispatch PRD in Chairman context: \(doc.featureName)")
+                }
+            }
+        }
+
         return scanned.map { $0.toSummary() }
     }
 

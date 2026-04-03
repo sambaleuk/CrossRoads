@@ -43,7 +43,7 @@ actor CockpitLifecycleManager {
     /// - Parameter session: The session to activate (must be in idle state)
     /// - Returns: Tuple of (updated session, chairman input context)
     /// - Throws: CockpitLifecycleError on guard violation or invalid state
-    func activate(session: CockpitSession) async throws -> (CockpitSession, ChairmanInput) {
+    func activate(session: CockpitSession, activePRDURL: URL? = nil) async throws -> (CockpitSession, ChairmanInput) {
         // Verify current state allows this transition
         guard session.status == .idle else {
             throw CockpitLifecycleError.invalidTransition(from: session.status, event: "activate")
@@ -57,8 +57,8 @@ actor CockpitLifecycleManager {
             throw CockpitLifecycleError.guardViolation(guard: "has_valid_project", event: "activate")
         }
 
-        // Action: read_project_context
-        let chairmanInput = try await contextReader.readContext(projectPath: path)
+        // Action: read_project_context (include active dispatch PRD if available)
+        let chairmanInput = try await contextReader.readContext(projectPath: path, activePRDURL: activePRDURL)
 
         // Transition: idle → initializing
         var updated = session

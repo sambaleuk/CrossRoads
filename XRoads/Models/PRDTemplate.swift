@@ -238,6 +238,21 @@ enum PRDStoryStatus: String, Codable, Sendable {
         case .blocked: return "xmark.circle.fill"
         }
     }
+
+    /// Progression order for status merging (never downgrade)
+    private var progressionOrder: Int {
+        switch self {
+        case .pending: return 0
+        case .blocked: return 1
+        case .inProgress: return 2
+        case .complete: return 3
+        }
+    }
+
+    /// Returns true if self is an earlier stage than the other status.
+    func isLessThan(_ other: PRDStoryStatus) -> Bool {
+        progressionOrder < other.progressionOrder
+    }
 }
 
 // MARK: - PRDUnitTest
