@@ -184,11 +184,16 @@ private struct OrchestratorInput: View {
                     }
                 }
 
-                TextField("", text: $text)
-                    .textFieldStyle(.plain)
-                    .font(Theme.TextStyle.body)
-                    .foregroundStyle(Theme.Color.ink)
-                    .focused($focused)
+                // ImageRenderer cannot suppress macOS TextField default chrome,
+                // so the snapshot path skips the real field. The running app
+                // (cursorOverride == nil) gets the actual TextField.
+                if cursorOverride == nil {
+                    TextField("", text: $text)
+                        .textFieldStyle(.plain)
+                        .font(Theme.TextStyle.body)
+                        .foregroundStyle(Theme.Color.ink)
+                        .focused($focused)
+                }
             }
             .frame(height: 32)
             .overlay(alignment: .bottom) {
