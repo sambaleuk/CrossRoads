@@ -36,7 +36,7 @@ public struct XRoadsApp: App {
                     }
                 }
         }
-        .windowStyle(.automatic)
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(
             width: Theme.Layout.defaultWindowWidth,
             height: Theme.Layout.defaultWindowHeight
