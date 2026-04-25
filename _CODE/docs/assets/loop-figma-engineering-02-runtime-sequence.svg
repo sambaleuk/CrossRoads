@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">XRoads loop engineering diagram 02</title>
+  <desc id="desc">Diagramme d'ingénierie Figma-ready montrant le lancement d'un slot et la boucle runtime détaillée avec vérification, sync, auto-commit et failover.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a1120"/>
+      <stop offset="100%" stop-color="#131f32"/>
+    </linearGradient>
+    <linearGradient id="laneHead" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#11253b"/>
+      <stop offset="100%" stop-color="#17324a"/>
+    </linearGradient>
+    <linearGradient id="nodeBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#13273c"/>
+      <stop offset="100%" stop-color="#173047"/>
+    </linearGradient>
+    <linearGradient id="nodeGreen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14302b"/>
+      <stop offset="100%" stop-color="#163129"/>
+    </linearGradient>
+    <linearGradient id="nodeGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#392f18"/>
+      <stop offset="100%" stop-color="#2c2518"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#02050a" flood-opacity="0.5"/>
+    </filter>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1d2a42" stroke-width="1"/>
+    </pattern>
+    <marker id="arrowBlue" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#7dd3fc"/>
+    </marker>
+    <marker id="arrowGold" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#fbbf24"/>
+    </marker>
+    <style>
+      .ui { font-family: "Avenir Next", "Inter", "Segoe UI", sans-serif; }
+      .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; }
+      .kicker { fill: #7dd3fc; font-size: 17px; font-weight: 800; letter-spacing: 3px; }
+      .headline { fill: #f8fafc; font-size: 44px; font-weight: 800; }
+      .sub { fill: #9fb1c6; font-size: 22px; font-weight: 500; }
+      .laneTitle { fill: #f8fafc; font-size: 18px; font-weight: 800; }
+      .nodeTitle { fill: #f8fafc; font-size: 20px; font-weight: 800; }
+      .nodeText { fill: #d5e0eb; font-size: 16px; }
+      .small { fill: #93a6bb; font-size: 14px; }
+      .chip { fill: #eff6ff; font-size: 15px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#grid)" opacity="0.35"/>
+
+  <g class="ui">
+    <text x="90" y="82" class="kicker">Figma / Engineering Diagram 02</text>
+    <text x="90" y="140" class="headline">Launch pipeline and runtime iteration of a loop slot</text>
+    <text x="90" y="186" class="sub">Audience: engineers. Focus: concrete control flow from dispatcher to PTY to loop script to shared status synchronization.</text>
+    <rect x="90" y="208" width="376" height="34" rx="17" fill="#13223a" stroke="#284b6a" stroke-width="1.5"/>
+    <text x="278" y="231" text-anchor="middle" class="chip">Sequence diagram encoded as layered SVG</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="70" y="274" width="1780" height="736" rx="30" fill="#0f1828" stroke="#27415f" stroke-width="2"/>
+  </g>
+
+  <g class="ui">
+    <rect x="100" y="306" width="290" height="52" rx="18" fill="url(#laneHead)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="245" y="339" text-anchor="middle" class="laneTitle">LayeredDispatcher</text>
+    <rect x="444" y="306" width="290" height="52" rx="18" fill="url(#laneHead)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="589" y="339" text-anchor="middle" class="laneTitle">LoopLauncher</text>
+    <rect x="788" y="306" width="290" height="52" rx="18" fill="url(#laneHead)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="933" y="339" text-anchor="middle" class="laneTitle">PTY wrapper</text>
+    <rect x="1132" y="306" width="290" height="52" rx="18" fill="url(#laneHead)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1277" y="339" text-anchor="middle" class="laneTitle">Loop script in worktree</text>
+    <rect x="1476" y="306" width="290" height="52" rx="18" fill="url(#laneHead)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1621" y="339" text-anchor="middle" class="laneTitle">Shared status / monitoring</text>
+  </g>
+
+  <g stroke="#28425f" stroke-width="2" opacity="0.8">
+    <line x1="245" y1="372" x2="245" y2="982"/>
+    <line x1="589" y1="372" x2="589" y2="982"/>
+    <line x1="933" y1="372" x2="933" y2="982"/>
+    <line x1="1277" y1="372" x2="1277" y2="982"/>
+    <line x1="1621" y1="372" x2="1621" y2="982"/>
+  </g>
+
+  <g class="ui">
+    <rect x="127" y="400" width="236" height="74" rx="18" fill="url(#nodeBlue)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="145" y="429" class="nodeTitle">startDispatch()</text>
+    <text x="145" y="455" class="nodeText">calculate layers</text>
+
+    <line x1="363" y1="437" x2="444" y2="437" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowBlue)"/>
+
+    <rect x="472" y="392" width="234" height="92" rx="18" fill="url(#nodeBlue)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="490" y="421" class="nodeTitle">createAllWorktrees()</text>
+    <text x="490" y="447" class="nodeText mono">git worktree add ...</text>
+    <text x="490" y="469" class="small">prepare prd.json, AGENT.md, progress.txt</text>
+
+    <line x1="706" y1="437" x2="788" y2="437" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowBlue)"/>
+
+    <rect x="816" y="392" width="234" height="92" rx="18" fill="url(#nodeBlue)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="834" y="421" class="nodeTitle">PTYProcess.launch()</text>
+    <text x="834" y="447" class="nodeText mono">/usr/bin/script -q -F /dev/null</text>
+    <text x="834" y="469" class="small">/bin/bash -c &lt;loop-script&gt;</text>
+
+    <line x1="1050" y1="437" x2="1132" y2="437" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowBlue)"/>
+
+    <rect x="1160" y="392" width="234" height="92" rx="18" fill="url(#nodeGreen)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1178" y="421" class="nodeTitle">bootstrap iteration</text>
+    <text x="1178" y="447" class="nodeText mono">source common.sh</text>
+    <text x="1178" y="469" class="small">init logs, env, trap, counters</text>
+
+    <line x1="1394" y1="437" x2="1476" y2="437" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowBlue)"/>
+
+    <rect x="1504" y="392" width="234" height="92" rx="18" fill="url(#nodeGreen)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1522" y="421" class="nodeTitle">monitoring starts</text>
+    <text x="1522" y="447" class="nodeText mono">status.json + logs/</text>
+    <text x="1522" y="469" class="small">UI polling / stream consumption</text>
+  </g>
+
+  <g class="ui">
+    <rect x="1128" y="542" width="298" height="72" rx="18" fill="url(#nodeGreen)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1148" y="571" class="nodeTitle">1. backup_loop_files()</text>
+    <text x="1148" y="597" class="nodeText">Snapshot critical loop files before agent call</text>
+
+    <rect x="1128" y="640" width="298" height="72" rx="18" fill="url(#nodeGreen)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1148" y="669" class="nodeTitle">2. build_prompt()</text>
+    <text x="1148" y="695" class="nodeText">Read first story with status != complete</text>
+
+    <rect x="1128" y="738" width="298" height="72" rx="18" fill="url(#nodeGreen)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1148" y="767" class="nodeTitle">3. run_agent(prompt)</text>
+    <text x="1148" y="793" class="nodeText">Provider-specific CLI call executes one pass</text>
+
+    <rect x="1128" y="836" width="298" height="72" rx="18" fill="url(#nodeGold)" stroke="#907323" stroke-width="1.5"/>
+    <text x="1148" y="865" class="nodeTitle">4. verify outcome</text>
+    <text x="1148" y="891" class="nodeText">Only accept completion if verification gates pass</text>
+  </g>
+
+  <g class="ui">
+    <line x1="1426" y1="872" x2="1490" y2="872" stroke="#fbbf24" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowGold)"/>
+    <rect x="1504" y="824" width="234" height="74" rx="18" fill="url(#nodeGreen)" stroke="#39816b" stroke-width="1.5"/>
+    <text x="1522" y="853" class="nodeTitle">PASS path</text>
+    <text x="1522" y="879" class="nodeText">sync completed stories and persist</text>
+
+    <rect x="1504" y="914" width="234" height="74" rx="18" fill="url(#nodeGold)" stroke="#907323" stroke-width="1.5"/>
+    <text x="1522" y="943" class="nodeTitle">FAIL / 429 path</text>
+    <text x="1522" y="969" class="nodeText">cooldown, retry, or failover exit code 42</text>
+  </g>
+
+  <g class="ui">
+    <path d="M 1621 824 C 1621 776, 1578 742, 1426 742" fill="none" stroke="#7dd3fc" stroke-width="4" stroke-linecap="round" marker-end="url(#arrowBlue)"/>
+    <text x="1512" y="720" class="small mono">sync_completed_stories_to_status()</text>
+
+    <path d="M 1621 914 C 1621 970, 1542 996, 1277 996 C 1042 996, 980 962, 980 906" fill="none" stroke="#fbbf24" stroke-width="4" stroke-linecap="round" stroke-dasharray="12 10" marker-end="url(#arrowGold)"/>
+    <text x="1110" y="1032" class="small mono">auto_commit_if_needed() before cooldown or retry</text>
+  </g>
+
+  <g class="ui">
+    <rect x="468" y="842" width="242" height="86" rx="18" fill="url(#nodeBlue)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="486" y="872" class="nodeTitle">launchLoop(config)</text>
+    <text x="486" y="898" class="nodeText mono">env: CROSSROADS_* variables</text>
+
+    <line x1="710" y1="885" x2="788" y2="885" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowBlue)"/>
+
+    <rect x="816" y="842" width="234" height="86" rx="18" fill="url(#nodeBlue)" stroke="#335f82" stroke-width="1.5"/>
+    <text x="834" y="872" class="nodeTitle">onOutput / onTermination</text>
+    <text x="834" y="898" class="nodeText">Bridge PTY output back to the app UI</text>
+  </g>
+</svg>

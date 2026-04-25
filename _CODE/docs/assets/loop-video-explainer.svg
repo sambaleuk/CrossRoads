@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Comment fonctionne la loop XRoads</title>
+  <desc id="desc">Illustration video 16:9 expliquant la boucle XRoads: préparation du worktree, traitement d'une story par itération, vérification, synchronisation d'état, auto-commit et répétition, avec coordination multi-agents.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#08111f"/>
+      <stop offset="55%" stop-color="#0d1728"/>
+      <stop offset="100%" stop-color="#111b2d"/>
+    </linearGradient>
+    <linearGradient id="heroGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#12d6c5" stop-opacity="0.40"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="stepA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f2b42"/>
+      <stop offset="100%" stop-color="#122239"/>
+    </linearGradient>
+    <linearGradient id="stepB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#15253e"/>
+      <stop offset="100%" stop-color="#0f1d31"/>
+    </linearGradient>
+    <linearGradient id="statusGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f3a2f"/>
+      <stop offset="100%" stop-color="#14281f"/>
+    </linearGradient>
+    <linearGradient id="warningGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#402713"/>
+      <stop offset="100%" stop-color="#2d1d10"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#04070d" flood-opacity="0.50"/>
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrowMuted" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#6b7280"/>
+    </marker>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#1a2740" stroke-width="1"/>
+    </pattern>
+    <style>
+      .ui { font-family: "Avenir Next", "Montserrat", "Segoe UI", sans-serif; }
+      .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; }
+      .eyebrow { fill: #7dd3fc; font-size: 18px; letter-spacing: 4px; font-weight: 700; }
+      .headline { fill: #f8fafc; font-size: 58px; font-weight: 800; }
+      .subhead { fill: #9fb2c8; font-size: 24px; font-weight: 500; }
+      .section { fill: #e2e8f0; font-size: 22px; font-weight: 700; }
+      .small { fill: #8ea1b8; font-size: 18px; }
+      .cardTitle { fill: #f8fafc; font-size: 24px; font-weight: 800; }
+      .cardText { fill: #b8c6d8; font-size: 18px; }
+      .label { fill: #8fdcf8; font-size: 14px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; }
+      .stat { fill: #dbeafe; font-size: 16px; font-weight: 600; }
+      .bullet { fill: #d7e3f2; font-size: 18px; }
+      .accent { fill: #6ee7d8; }
+      .ok { fill: #86efac; }
+      .warn { fill: #fbbf24; }
+      .muted { fill: #70859b; }
+      .chip { fill: #d8f6f2; font-size: 16px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#grid)" opacity="0.38"/>
+  <ellipse cx="320" cy="150" rx="340" ry="190" fill="url(#heroGlow)" opacity="0.55"/>
+  <ellipse cx="1560" cy="980" rx="420" ry="220" fill="#10243d" opacity="0.35"/>
+
+  <g class="ui">
+    <text x="120" y="96" class="eyebrow">XROADS LOOP EXPLAINER</text>
+    <text x="120" y="165" class="headline">Comment la loop XRoads avance,</text>
+    <text x="120" y="228" class="headline">sans perdre le fil</text>
+    <text x="120" y="284" class="subhead">Chaque tour traite une seule story, vérifie le résultat, mémorise le progrès, puis redémarre avec un contexte propre.</text>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <rect x="120" y="338" width="1160" height="462" rx="34" fill="#0d1625" stroke="#20324d" stroke-width="2"/>
+    <text x="160" y="390" class="section ui">La mécanique centrale</text>
+
+    <g transform="translate(156 432)">
+      <rect x="0" y="0" width="190" height="124" rx="24" fill="#0f2237" stroke="#234367" stroke-width="2"/>
+      <text x="24" y="34" class="label ui">Préparation</text>
+      <text x="24" y="66" class="cardTitle ui">1. L’orchestrateur</text>
+      <text x="24" y="94" class="cardText ui">crée un worktree isolé</text>
+      <text x="24" y="118" class="cardText mono">prd.json + AGENT.md</text>
+    </g>
+
+    <line x1="350" y1="494" x2="430" y2="494" stroke="#60a5fa" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+    <g transform="translate(434 432)">
+      <rect x="0" y="0" width="220" height="124" rx="24" fill="url(#stepA)" stroke="#1b5d85" stroke-width="2"/>
+      <text x="26" y="34" class="label ui">Itération</text>
+      <text x="26" y="66" class="cardTitle ui">2. Lire une seule</text>
+      <text x="26" y="94" class="cardText ui">story encore incomplète</text>
+      <text x="26" y="118" class="cardText mono">statut != complete</text>
+    </g>
+
+    <line x1="654" y1="494" x2="734" y2="494" stroke="#60a5fa" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+    <g transform="translate(738 432)">
+      <rect x="0" y="0" width="220" height="124" rx="24" fill="url(#stepB)" stroke="#2c4667" stroke-width="2"/>
+      <text x="26" y="34" class="label ui">Production</text>
+      <text x="26" y="66" class="cardTitle ui">3. Construire</text>
+      <text x="26" y="94" class="cardText ui">exactement un incrément</text>
+      <text x="26" y="118" class="cardText ui">et son test associé</text>
+    </g>
+
+    <line x1="958" y1="494" x2="1038" y2="494" stroke="#60a5fa" stroke-width="6" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+    <g transform="translate(1042 432)">
+      <rect x="0" y="0" width="190" height="124" rx="24" fill="#132839" stroke="#295a5f" stroke-width="2"/>
+      <text x="24" y="34" class="label ui">Contrôle</text>
+      <text x="24" y="66" class="cardTitle ui">4. Vérifier</text>
+      <text x="24" y="94" class="cardText ui">build + typecheck</text>
+      <text x="24" y="118" class="cardText ui">+ test unitaire</text>
+    </g>
+
+    <path d="M 1137 558 C 1137 645, 1048 713, 932 713 L 545 713 C 452 713, 375 670, 355 608" fill="none" stroke="#6ee7d8" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 10" marker-end="url(#arrow)"/>
+
+    <g transform="translate(324 612)">
+      <rect x="0" y="0" width="370" height="126" rx="26" fill="url(#statusGrad)" stroke="#2f6b49" stroke-width="2"/>
+      <text x="28" y="34" class="label ui">Si tout passe</text>
+      <text x="28" y="66" class="cardTitle ui">5. Mémoriser et sécuriser</text>
+      <text x="28" y="96" class="cardText ui">mettre la story à jour, synchroniser l’état,</text>
+      <text x="28" y="120" class="cardText ui">puis auto-commiter ce qui a été produit</text>
+    </g>
+
+    <g transform="translate(734 612)">
+      <rect x="0" y="0" width="498" height="126" rx="26" fill="url(#warningGrad)" stroke="#7a4b16" stroke-width="2"/>
+      <text x="28" y="34" class="label ui">Si ça bloque</text>
+      <text x="28" y="66" class="cardTitle ui">6. Ne pas mentir sur l’avancement</text>
+      <text x="28" y="96" class="cardText ui">ne pas marquer la story comme terminée, noter le problème,</text>
+      <text x="28" y="120" class="cardText ui">laisser la loop réessayer ou déclencher un failover après limite</text>
+    </g>
+
+    <circle cx="1200" cy="392" r="18" fill="#0f2237" stroke="#60a5fa" stroke-width="3"/>
+    <path d="M 1200 382 a 10 10 0 1 1 -1 0" fill="none" stroke="#6ee7d8" stroke-width="3" stroke-linecap="round"/>
+    <polyline points="1197,374 1209,374 1209,386" fill="none" stroke="#6ee7d8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="1232" y="399" class="small ui">et si toutes les stories sont terminées, la loop s’arrête.</text>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <rect x="1320" y="338" width="480" height="462" rx="34" fill="#0d1625" stroke="#20324d" stroke-width="2"/>
+    <text x="1360" y="390" class="section ui">Pourquoi ça tient dans le temps</text>
+
+    <g transform="translate(1360 430)">
+      <rect x="0" y="0" width="400" height="82" rx="22" fill="#102239" stroke="#27496a" stroke-width="2"/>
+      <text x="28" y="33" class="cardTitle ui">Contexte frais à chaque tour</text>
+      <text x="28" y="60" class="cardText ui">La mémoire utile vit dans les fichiers, pas dans une longue session fragile.</text>
+    </g>
+
+    <g transform="translate(1360 530)">
+      <rect x="0" y="0" width="400" height="82" rx="22" fill="#102239" stroke="#27496a" stroke-width="2"/>
+      <text x="28" y="33" class="cardTitle ui">Une seule story à la fois</text>
+      <text x="28" y="60" class="cardText ui">La loop réduit la dispersion: un objectif court, un verdict clair, puis on repart.</text>
+    </g>
+
+    <g transform="translate(1360 630)">
+      <rect x="0" y="0" width="400" height="82" rx="22" fill="#102239" stroke="#27496a" stroke-width="2"/>
+      <text x="28" y="33" class="cardTitle ui">Des garde-fous concrets</text>
+      <text x="28" y="60" class="cardText ui">Backup des fichiers, sync de statut, auto-commit, cooldown et failover en cas de problème.</text>
+    </g>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <rect x="120" y="838" width="1680" height="172" rx="34" fill="#0d1625" stroke="#20324d" stroke-width="2"/>
+    <text x="160" y="892" class="section ui">En parallèle, plusieurs agents peuvent boucler en même temps</text>
+
+    <g transform="translate(160 922)">
+      <rect x="0" y="0" width="262" height="58" rx="20" fill="#0f2237" stroke="#315a87" stroke-width="2"/>
+      <circle cx="36" cy="29" r="9" fill="#60a5fa"/>
+      <text x="58" y="25" class="cardTitle ui" font-size="20">Claude</text>
+      <text x="58" y="45" class="cardText ui" font-size="16">worktree isolé</text>
+    </g>
+
+    <g transform="translate(460 922)">
+      <rect x="0" y="0" width="262" height="58" rx="20" fill="#241f12" stroke="#8c6a1a" stroke-width="2"/>
+      <circle cx="36" cy="29" r="9" fill="#fbbf24"/>
+      <text x="58" y="25" class="cardTitle ui" font-size="20">Gemini</text>
+      <text x="58" y="45" class="cardText ui" font-size="16">worktree isolé</text>
+    </g>
+
+    <g transform="translate(760 922)">
+      <rect x="0" y="0" width="262" height="58" rx="20" fill="#172518" stroke="#2f6b49" stroke-width="2"/>
+      <circle cx="36" cy="29" r="9" fill="#86efac"/>
+      <text x="58" y="25" class="cardTitle ui" font-size="20">Codex</text>
+      <text x="58" y="45" class="cardText ui" font-size="16">worktree isolé</text>
+    </g>
+
+    <line x1="1028" y1="951" x2="1135" y2="951" stroke="#6b7280" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowMuted)"/>
+
+    <g transform="translate(1144 900)">
+      <rect x="0" y="0" width="280" height="102" rx="24" fill="#132b20" stroke="#3b8d67" stroke-width="2"/>
+      <text x="24" y="34" class="label ui">Coordination</text>
+      <text x="24" y="62" class="cardTitle ui">status.json partagé</text>
+      <text x="24" y="88" class="cardText mono">qui attend qui, qui a fini quoi</text>
+    </g>
+
+    <line x1="1428" y1="951" x2="1533" y2="951" stroke="#6b7280" stroke-width="5" stroke-linecap="round" marker-end="url(#arrowMuted)"/>
+
+    <g transform="translate(1542 900)">
+      <rect x="0" y="0" width="218" height="102" rx="24" fill="#122239" stroke="#315a87" stroke-width="2"/>
+      <text x="24" y="34" class="label ui">Résultat</text>
+      <text x="24" y="62" class="cardTitle ui">un ensemble</text>
+      <text x="24" y="88" class="cardText ui">qui avance proprement</text>
+    </g>
+  </g>
+
+  <g class="ui">
+    <rect x="126" y="74" width="228" height="34" rx="17" fill="#0f2237" stroke="#27496a" stroke-width="1.5"/>
+    <text x="240" y="97" text-anchor="middle" class="chip">Master SVG 1920×1080 pour vidéo</text>
+  </g>
+</svg>

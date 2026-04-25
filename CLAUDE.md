@@ -1,180 +1,85 @@
-# CLAUDE.md - XRoads Development Guide
+# CLAUDE.md — _CROSSROADS_SWIFT
 
-This file provides guidance for AI agents (Claude, etc.) working on the XRoads codebase.
+Master instructions for Claude when working in this production repo.
 
-## Project Overview
+---
 
-**XRoads** is a native macOS SwiftUI application that orchestrates multiple AI coding agents (Claude Code, Gemini CLI, Codex) working in parallel on isolated git worktrees.
+## 1. Identity & Purpose
 
-## Quick Start
+**Repo:** `_CROSSROADS_SWIFT`
+**Category:** A — SaaS Product (native macOS, distributed app)
+**Parent:** `03_PRODUCTION/`
+**Operating entity:** NeuroGrid LLC (Wyoming)
+**Stability tier:** A (macOS-native release — verify user count)
 
-```bash
-# Build
-swift build
+### What it is
 
-# Run
-swift run XRoads
+XRoads — "Give it a PRD. Get code on main." Native macOS app that runs 6 AI coding agents in parallel on a codebase, each in its own git worktree + PTY. Agents write code, run tests, XRoads merges back. Swift implementation (macOS 14+, Swift 5.9+).
 
-# Build with Xcode (creates proper app bundle)
-xcodebuild -scheme XRoads -destination 'platform=macOS' build
-```
+Companion product: `_CROSSROADS_TAURI` (cross-platform version). See also `_XROADS_LOOP` (shell scripts used by both).
 
-## Architecture
+## 2. Tech stack
 
-```
-XRoads/
-├── App/
-│   └── XRoadsApp.swift          # @main entry point, AppDelegate
-├── Models/                       # Data models (Codable, Sendable)
-├── Views/                        # SwiftUI views
-│   └── Components/              # Reusable UI components
-├── ViewModels/                   # @Observable view models
-├── Services/                     # Actor-based services
-└── Resources/                    # Theme, assets
-```
+- **Language:** Swift 5.9+
+- **Platform:** macOS 14+ (native)
+- **Build:** Swift Package Manager (`Package.swift`)
+- **Distribution:** (TBD — Mac App Store / direct DMG / homebrew cask — confirm)
+- **Dependencies:** `xroads-modragor-deps` (ajv + ajv-formats, for PRD JSON-schema validation)
 
-## Key Patterns
+## 3. Reference scaffold
 
-### 1. Actor-Based Concurrency
-All services use Swift actors for thread safety:
-```swift
-actor GitService {
-    func createWorktree(...) async throws -> Worktree
-}
-```
+Follows the 4-folder production scaffold — see `_ADSTAGER/CLAUDE.md`.
 
-### 2. Environment-Based Dependency Injection
-```swift
-@Environment(\.appState) private var appState
-```
+## 4. Capability declaration
 
-### 3. MCP Integration
-The app communicates with agents via Model Context Protocol (MCP):
-- Server: `xroads-mcp/` (TypeScript)
-- Client: `Services/MCPClient.swift` (Swift actor)
+### Allowed without asking
 
-## Critical Bug Fixes
+- Read any file
+- Edit `_RESEARCH/**`, `_ROADMAP/**`, `_RETEX/**`, `_OPS/**`
+- Add a new `_INCIDENTS/*.md` file
 
-### TextField Keyboard Input in macOS Apps (IMPORTANT!)
+### Ask before
 
-**Problem**: When running a SwiftUI macOS app via `swift run`, TextField/NSTextField in sheets or secondary windows don't receive keyboard input. User hears system "bonk" sound.
+- Editing `_CODE/**` — production macOS app
+- Editing `_COMPLIANCE/**`
+- Building (`swift build`), signing, notarizing, or shipping a release
+- Changing distribution channel
 
-**Root Cause**: Apps run via `swift run` don't have proper activation policy set by default.
+### Never
 
-**Solution**: Add this to your AppDelegate:
-```swift
-func applicationDidFinishLaunching(_ notification: Notification) {
-    // CRITICAL: Set activation policy for keyboard input
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
-}
-```
+- Ship an unsigned / un-notarized build to users
+- Commit developer certificates or signing keys
+- Break the promise: each agent gets its own worktree (it's the structural guarantee of the product)
 
-**Why it works**: `.regular` activation policy allows the app to:
-- Appear in the Dock
-- Receive keyboard events in all windows
-- Properly manage window focus
+## 5. Workspace rules
 
-### NSTextField in Sheets Best Practices
+- macOS code-signing + notarization is mandatory for distribution
+- AI provider cost is per-user (runs on user's Anthropic key) — still document in `_OPS/cost.md` for the project's own test runs
+- Append-only zones: `_INCIDENTS/`, `_COMPLIANCE/audit-log.md`
 
-Even with proper activation policy, for reliable text input in sheets:
+## 6. Inheritance
 
-1. **Use pure AppKit windows** for forms requiring text input (see `FloatingInputWindow.swift`)
-2. **Activate app before showing window**:
-   ```swift
-   NSApp.activate(ignoringOtherApps: true)
-   window.makeKeyAndOrderFront(nil)
-   ```
-3. **Focus text field after window appears**:
-   ```swift
-   DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-       window.makeFirstResponder(textField)
-   }
-   ```
+`03_PRODUCTION/CLAUDE.md` → `00_MAIN/CLAUDE.md`. Generic runbooks at `/07_INFRA/runbooks/`.
 
-## File Naming Conventions
+## 7. Compression layer
 
-- Views: `*View.swift`, `*Sheet.swift`, `*Card.swift`
-- ViewModels: `*ViewModel.swift`
-- Services: `*Service.swift`, `*Client.swift`
-- Models: Singular nouns (`Agent.swift`, `Worktree.swift`)
+- Git-worktree-per-agent pattern (shared with `_CROSSROADS_TAURI`)
+- PRD-driven agent orchestration
+- Native macOS app shipping playbook (signing, notarization, update flow)
 
-## Testing
+## 8. Preferences
 
-```bash
-# Run tests
-swift test
+- Swift-style main branch, release tags drive TestFlight / DMG
+- CHANGELOG strict — breaking = major
 
-# Test TextField bug reproduction
-swift Tests/test_textfield_bug.swift
-```
+## 9. Honesty clause
 
-## Common Tasks
+- "6 agents in parallel" is the current default — actual count is configurable, not a contract
+- "Code shipped while you sleep" is aspirational marketing — users review the PR
 
-### Adding a New View
-1. Create `Views/MyNewView.swift`
-2. Add to `Package.swift` sources array
-3. Use `@Environment(\.appState)` for state access
+## 10. Open questions for Birahim
 
-### Adding a New Service
-1. Create `Services/MyService.swift` as an actor
-2. Add to `ServiceContainer.swift`
-3. Add to `Package.swift` sources array
-
-### Adding a New Model
-1. Create `Models/MyModel.swift`
-2. Conform to `Codable`, `Sendable`, `Hashable` as needed
-3. Add to `Package.swift` sources array
-
-## Dependencies
-
-- **macOS 14.0+** (Sonoma)
-- **Swift 5.9+**
-- **Node.js 18+** (for MCP server)
-
-## MCP Server
-
-```bash
-cd xroads-mcp
-npm install
-npm run build
-npm start  # or npm run dev
-```
-
-## Git Workflow
-
-- Main branch: `main`
-- Feature branches: `feat/<feature-name>`
-- Bug fixes: `fix/<bug-name>`
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| ⌘N | New Worktree |
-| ⌘W | Close Worktree |
-| ⌘. | Stop Agent |
-| ⌘K | Command Palette |
-| ⌘L | Clear Logs |
-
-## Troubleshooting
-
-### App doesn't receive keyboard input
-- Ensure `NSApp.setActivationPolicy(.regular)` is called in AppDelegate
-- Check that windows are made key with `makeKeyAndOrderFront`
-
-### MCP server not found
-- Build the MCP server: `cd xroads-mcp && npm run build`
-- Check path in `MCPClient.swift` `findMCPServerPath()`
-
-### CLI tools not detected
-- Check `ConfigChecker.swift` for search paths
-- Ensure tools are in PATH or standard locations
-
-## Code Style
-
-- Use Swift's native async/await
-- Prefer actors over classes for shared state
-- Use `@MainActor` for UI-related code
-- Keep views small, extract to components
-- Document public APIs with `///` comments
+1. Current distribution channel + download counts?
+2. Relationship with `_CROSSROADS_TAURI`: Swift = flagship, Tauri = cross-platform port — or are we splitting investment?
+3. Telemetry — opt-in, opt-out, or none?
+4. Pricing model: free, paid, freemium?
