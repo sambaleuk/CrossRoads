@@ -117,13 +117,43 @@ struct MainWindowView: View {
     @ViewBuilder
     private var navigationContent: some View {
         agenticModeLayout
-            .toolbar { toolbarContent }
     }
 
     /// Agentic mode layout: Chat Panel | Dashboard (max space) | Right Panel (Git + Logs stacked)
     @ViewBuilder
     private var agenticModeLayout: some View {
         VStack(spacing: 0) {
+            TitleBar(
+                showChatPanel: $showChatPanel,
+                showInspector: $showInspector,
+                showCockpitPanel: appState.showCockpitPanel,
+                pendingProposalCount: appState.cockpitViewModel?.pendingProposals.count ?? 0,
+                onToggleChat: {
+                    withAnimation(.easeInOut(duration: Theme.Animation.normal)) {
+                        showChatPanel.toggle()
+                    }
+                },
+                onToggleCockpit: {
+                    withAnimation(.easeInOut(duration: Theme.Animation.normal)) {
+                        appState.showCockpitPanel.toggle()
+                        if appState.showCockpitPanel {
+                            appState.bootstrapCockpit()
+                        }
+                    }
+                },
+                onToggleReview: {
+                    if let cockpitVM = appState.cockpitViewModel {
+                        cockpitVM.showReviewRibbon.toggle()
+                    }
+                },
+                onStartSession: { showNewWorktreeSheet = true },
+                onLoadPRD: { showPRDLoaderSheet = true },
+                onShowHistory: { appState.showHistorySheet = true },
+                onShowIntelligence: { showIntelligenceSheet = true },
+                onShowSkills: { showSkillsBrowserSheet = true },
+                onShowArtDirection: { showArtDirectionSheet = true }
+            )
+
             // Recovery banner (shown when interrupted orchestration detected)
             if let recovery = appState.recoveredOrchestration {
                 OrchestrationRecoveryBanner(
@@ -136,6 +166,9 @@ struct MainWindowView: View {
             // Main content
             HStack(spacing: 0) {
                 // Left: Orchestrator Chat Panel (US-V4-015)
+                // Idle-state orchestrator sidebar. The OrchestratorChatView (chat
+                // history shape) is the active-state target; it remains in the
+                // codebase for the conversation-mounted commit later.
                 CollapsiblePanel(
                     isExpanded: $showChatPanel,
                     width: Binding(
@@ -148,25 +181,20 @@ struct MainWindowView: View {
                     resizable: true,
                     edge: .leading
                 ) {
-                    OrchestratorChatView()
+                    OrchestratorSidebar()
                 }
 
-                // Center: Dashboard with brain and slots (maximized space)
-                XRoadsDashboardView(
-                    dashboardMode: Binding(
-                        get: { appState.dashboardMode },
-                        set: { appState.dashboardMode = $0 }
-                    ),
-                    terminalSlots: Binding(
-                        get: { appState.terminalSlots },
-                        set: { appState.terminalSlots = $0 }
-                    ),
-                    orchestratorState: Binding(
-                        get: { appState.orchestratorVisualState },
-                        set: { appState.orchestratorVisualState = $0 }
-                    ),
-                    showGitPanel: false
-                )
+                // Center column: status bar above, hero idle state below.
+                // Active orchestration view (transition target from idle) is
+                // deferred. The existing XRoadsDashboardView contains the
+                // brain-creature view (forbidden by v2 spec) and a non-conformant
+                // slot grid; both rebuild in the active-state pass.
+                VStack(spacing: 0) {
+                    StatusBar()
+
+                    HeroIdleState()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Cockpit Mode panel (US-004)
@@ -183,8 +211,10 @@ struct MainWindowView: View {
                 }
             }
 
-            // Bottom: Loop Configuration Panel
-            LoopConfigurationPanel()
+            // Bottom strip per spec section 8. The previous LoopConfigurationPanel
+            // surfaced an expand-to-configure UX not described in the v2 spec; the
+            // expand affordance is deferred to a sheet/popover in a later commit.
+            BottomBar()
         }
         .background(Color.bgApp)
         .overlay(
@@ -228,112 +258,6 @@ struct MainWindowView: View {
             .transition(.move(edge: .top).combined(with: .opacity))
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: cockpitVM.showReviewRibbon)
         }
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            toolbarButtons
-        }
-    }
-
-    @ViewBuilder
-    private var toolbarButtons: some View {
-        // Suite Switcher — mission profile selector
-        SuiteSwitcher()
-
-        Divider()
-
-        // US-V4-015: Toggle Chat Panel
-        Button {
-            withAnimation(.easeInOut(duration: Theme.Animation.normal)) {
-                showChatPanel.toggle()
-            }
-        } label: {
-            Label(showChatPanel ? "Hide Orchestrator" : "Show Orchestrator", systemImage: "sidebar.leading")
-        }
-        .help("Toggle orchestrator chat panel (⌘⇧O)")
-        .keyboardShortcut("o", modifiers: [.command, .shift])
-
-        // US-004: Cockpit Mode toggle
-        Button {
-            withAnimation(.easeInOut(duration: Theme.Animation.normal)) {
-                appState.showCockpitPanel.toggle()
-                if appState.showCockpitPanel {
-                    appState.bootstrapCockpit()
-                }
-            }
-        } label: {
-            Label(
-                appState.showCockpitPanel ? "Hide Cockpit" : "Cockpit Mode",
-                systemImage: appState.cockpitViewModel?.isActive == true ? "gauge.open.with.lines.needle.84percent.exclamation" : "gauge.open.with.lines.needle.33percent"
-            )
-        }
-        .help("Toggle Cockpit Mode panel (⌘⇧C)")
-        .keyboardShortcut("c", modifiers: [.command, .shift])
-
-        // Review Ribbon toggle
-        Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                if let cockpitVM = appState.cockpitViewModel {
-                    cockpitVM.showReviewRibbon.toggle()
-                }
-            }
-        } label: {
-            let hasPending = (appState.cockpitViewModel?.pendingProposals.count ?? 0) > 0
-            Label(
-                hasPending ? "Review (\(appState.cockpitViewModel?.pendingProposals.count ?? 0))" : "Review",
-                systemImage: hasPending ? "eye.badge.clock.fill" : "eye"
-            )
-        }
-        .help("Toggle Review Ribbon (⌘⇧R)")
-        .keyboardShortcut("r", modifiers: [.command, .shift])
-
-        Button { showNewWorktreeSheet = true } label: {
-            Label("Start Session", systemImage: "play.circle.fill")
-        }
-        .help("Start a new development session (⌘N)")
-
-        Button {
-            withAnimation(.easeInOut(duration: Theme.Animation.normal)) {
-                showInspector.toggle()
-            }
-        } label: {
-            Label(showInspector ? "Hide Inspector" : "Show Inspector", systemImage: "sidebar.trailing")
-        }
-        .help("Toggle logs panel")
-
-        Divider()
-
-        Button { showPRDLoaderSheet = true } label: {
-            Label("Load PRD", systemImage: "doc.text")
-        }
-        .help("Select a prd.json file to preview before orchestration")
-
-        Button { appState.showHistorySheet = true } label: {
-            Label("History", systemImage: "clock.arrow.circlepath")
-        }
-        .help("View past orchestrations")
-
-        Button { showIntelligenceSheet = true } label: {
-            Label("Intelligence", systemImage: "brain.head.profile")
-        }
-        .help("Learning analytics, trust scores, memory, conflicts")
-
-        Button { showSkillsBrowserSheet = true } label: {
-            Label("Skills", systemImage: "puzzlepiece.extension")
-        }
-        .help("Browse available skills")
-
-        Button { showArtDirectionSheet = true } label: {
-            Label("Art Direction", systemImage: "paintpalette")
-        }
-        .help("Open Art Direction pipeline")
-
-        SettingsLink {
-            Label("Settings", systemImage: "gearshape")
-        }
-        .help("Open settings (⌘,)")
     }
 
     // MARK: - Command Handlers
