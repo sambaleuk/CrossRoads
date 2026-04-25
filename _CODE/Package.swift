@@ -30,7 +30,8 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/Skills"),
-                .process("Resources/cockpit-soul.md")
+                .process("Resources/cockpit-soul.md"),
+                .copy("Resources/Patterns")
             ]
         ),
         // Executable target that depends on the library

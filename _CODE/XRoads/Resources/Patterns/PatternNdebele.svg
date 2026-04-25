@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <!-- Ndebele stepped diamond motif -->
+  <!-- Outer stepped triangle top-left -->
+  <polygon points="0,0 16,0 0,16" fill="black"/>
+  <!-- Outer stepped triangle bottom-right -->
+  <polygon points="40,40 24,40 40,24" fill="black"/>
+  <!-- Stepped border inset — top right -->
+  <rect x="24" y="0"  width="16" height="4" fill="black"/>
+  <rect x="36" y="0"  width="4"  height="16" fill="black"/>
+  <!-- Stepped border inset — bottom left -->
+  <rect x="0"  y="36" width="16" height="4" fill="black"/>
+  <rect x="0"  y="24" width="4"  height="16" fill="black"/>
+  <!-- Centre diamond -->
+  <polygon points="20,12 28,20 20,28 12,20" fill="black"/>
+</svg>

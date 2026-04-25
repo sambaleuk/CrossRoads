@@ -33,8 +33,16 @@ struct BottomBar: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 26)
-        .background(Theme.Color.surface)
+        .background(
+            Theme.Color.surface
+                .africanPatternOverlay(.bogolan, opacity: 0.01, color: Theme.Color.faint)
+        )
         .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Theme.Color.rule)
+                .frame(height: Theme.Layout.ruleWidth)
+        }
+        .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(Theme.Color.rule)
                 .frame(height: Theme.Layout.ruleWidth)

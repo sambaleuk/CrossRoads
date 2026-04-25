@@ -16,6 +16,7 @@ struct HeroIdleState: View {
     @State private var diagAgents = false
     @State private var diagGates = false
     @State private var diagDrift = false
+    @State private var promptCursorOn = true
 
     private let framePadding: CGFloat = 48
     private let calloutInset: CGFloat = 16
@@ -24,6 +25,7 @@ struct HeroIdleState: View {
         GeometryReader { geo in
             ZStack {
                 Theme.Color.void
+                    .africanPatternOverlay(.kubaMaze)
 
                 CoordinateCallouts(
                     width: geo.size.width,
@@ -36,15 +38,25 @@ struct HeroIdleState: View {
 
                 let scanY = (snapshotScanlineSeed ?? scanlineProgress)
                     * (geo.size.height - framePadding * 2)
+                let markGap: CGFloat = 140  // brand mark width + breathing room
+                let halfCanvas = max(0, geo.size.width - framePadding * 2)
+                let segmentW  = max(0, (halfCanvas - markGap) / 2)
 
+                // Left scanline segment (gaps around brand mark)
                 Rectangle()
-                    .fill(Theme.Color.voltage.opacity(0.20))
-                    .frame(
-                        width: max(0, geo.size.width - framePadding * 2),
-                        height: 1
-                    )
+                    .fill(Theme.Color.voltage.opacity(0.15))
+                    .frame(width: segmentW, height: 1)
                     .position(
-                        x: geo.size.width / 2,
+                        x: framePadding + segmentW / 2,
+                        y: framePadding + scanY
+                    )
+
+                // Right scanline segment
+                Rectangle()
+                    .fill(Theme.Color.voltage.opacity(0.15))
+                    .frame(width: segmentW, height: 1)
+                    .position(
+                        x: geo.size.width - framePadding - segmentW / 2,
                         y: framePadding + scanY
                     )
 
@@ -54,7 +66,7 @@ struct HeroIdleState: View {
                     Text("SYSTEM IDLE")
                         .font(Theme.TextStyle.labelMono)
                         .tracking(Theme.Tracking.tacticalCapsDense)
-                        .foregroundStyle(Theme.Color.voltage)
+                        .foregroundStyle(Theme.Color.muted)
 
                     DiagnosticReadout(
                         agentsLive: diagAgents,
@@ -62,10 +74,16 @@ struct HeroIdleState: View {
                         driftLive: diagDrift
                     )
 
-                    Text("what are we shipping?")
-                        .font(Theme.TextStyle.smallBody)
-                        .foregroundStyle(Theme.Color.muted)
-                        .padding(.top, 8)
+                    HStack(spacing: 1) {
+                        Text("what are we shipping?")
+                            .font(Theme.Font.mono(12))
+                            .foregroundStyle(Theme.Color.faint)
+                        Rectangle()
+                            .fill(Theme.Color.voltage)
+                            .frame(width: 1.5, height: 13)
+                            .opacity(promptCursorOn ? 1 : 0)
+                    }
+                    .padding(.top, 8)
                 }
             }
             .onAppear {
@@ -82,6 +100,9 @@ struct HeroIdleState: View {
                 }
                 withAnimation(Motion.diagTick.delay(2.0)) {
                     diagDrift.toggle()
+                }
+                withAnimation(Motion.cursorBlink) {
+                    promptCursorOn = false
                 }
             }
         }
@@ -120,8 +141,7 @@ private struct DiagPair: View {
             Text(value)
                 .font(Theme.TextStyle.tacticalMono)
                 .tracking(Theme.Tracking.tacticalCaps)
-                .foregroundStyle(Theme.Color.voltage)
-                .opacity(live ? 1.0 : 0.7)
+                .foregroundStyle(live ? Theme.Color.voltage : Theme.Color.muted)
         }
     }
 }

@@ -191,7 +191,7 @@ enum Theme {
 // MARK: - StatusPip (locked component)
 
 struct StatusPip: View {
-    enum State { case idle, queued, active, error }
+    enum State { case idle, queued, active, connected, error }
 
     let state: State
     var animated: Bool = true
@@ -201,7 +201,7 @@ struct StatusPip: View {
     var body: some View {
         Rectangle()
             .fill(fillColor)
-            .frame(width: 3, height: 9)
+            .frame(width: 4, height: 9)
             .opacity(currentOpacity)
             .onAppear {
                 guard animated, isLive else { return }
@@ -213,13 +213,14 @@ struct StatusPip: View {
         switch state {
         case .idle, .queued: return Theme.Color.faint
         case .active, .error: return Theme.Color.voltage
+        case .connected:      return SwiftUI.Color(hex: 0x3FB950) // neon-green — healthy
         }
     }
 
     private var isLive: Bool {
         switch state {
-        case .active, .error: return true
-        case .idle, .queued: return false
+        case .active, .error, .connected: return true
+        case .idle, .queued:              return false
         }
     }
 

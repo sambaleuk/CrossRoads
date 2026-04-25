@@ -7,13 +7,37 @@ struct BrandMarkPlaceholder: View {
     var size: CGFloat = 40
 
     var body: some View {
-        Rectangle()
-            .fill(Theme.Color.void)
-            .frame(width: size, height: size)
-            .overlay(
-                Rectangle()
-                    .stroke(Theme.Color.voltage, lineWidth: Theme.Layout.ruleWidth)
-            )
+        ZStack {
+            // Container
+            Rectangle()
+                .fill(Theme.Color.void)
+                .frame(width: size, height: size)
+                .overlay(
+                    Rectangle()
+                        .stroke(Theme.Color.voltage, lineWidth: Theme.Layout.ruleWidth)
+                )
+
+            // Crosshair reticle — intentional targeting glyph
+            let armLen = size * 0.32
+            let hairWeight: CGFloat = Theme.Layout.ruleWidth
+            let armOpacity = size >= 80 ? 0.60 : 0.45
+
+            // Horizontal hair
+            Rectangle()
+                .fill(Theme.Color.voltage.opacity(armOpacity))
+                .frame(width: armLen, height: hairWeight)
+
+            // Vertical hair
+            Rectangle()
+                .fill(Theme.Color.voltage.opacity(armOpacity))
+                .frame(width: hairWeight, height: armLen)
+
+            // Center dot
+            Circle()
+                .fill(Theme.Color.voltage.opacity(0.7))
+                .frame(width: max(2, size * 0.04), height: max(2, size * 0.04))
+        }
+        .frame(width: size, height: size)
     }
 }
 

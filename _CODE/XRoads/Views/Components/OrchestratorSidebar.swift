@@ -35,7 +35,10 @@ struct OrchestratorSidebar: View {
             inputBlock
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.Color.void)
+        .background(
+            Theme.Color.void
+                .africanPatternOverlay(.ndebele, opacity: 0.01)
+        )
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(Theme.Color.rule)
@@ -55,7 +58,7 @@ struct OrchestratorSidebar: View {
             Spacer()
 
             HStack(spacing: 6) {
-                StatusPip(state: .active)
+                StatusPip(state: .connected)
                 Text("API")
                     .font(Theme.Font.mono(9))
                     .tracking(Theme.Tracking.tacticalCaps)
@@ -78,7 +81,8 @@ struct OrchestratorSidebar: View {
 
             Text("multi-agent orchestration")
                 .font(Theme.Font.displayRegular(10))
-                .foregroundStyle(Theme.Color.muted)
+                .tracking(Theme.Tracking.labelMonoCaps)
+                .foregroundStyle(Theme.Color.faint)
         }
         .frame(maxWidth: .infinity)
     }
@@ -138,7 +142,7 @@ private struct SuggestionPill: View {
             .overlay(
                 Rectangle()
                     .stroke(
-                        hovering ? Theme.Color.voltage : Theme.Color.rule,
+                        hovering ? Theme.Color.voltage : Theme.Color.faint,
                         lineWidth: Theme.Layout.ruleWidth
                     )
             )
