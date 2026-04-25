@@ -166,6 +166,9 @@ struct MainWindowView: View {
             // Main content
             HStack(spacing: 0) {
                 // Left: Orchestrator Chat Panel (US-V4-015)
+                // Idle-state orchestrator sidebar. The OrchestratorChatView (chat
+                // history shape) is the active-state target; it remains in the
+                // codebase for the conversation-mounted commit later.
                 CollapsiblePanel(
                     isExpanded: $showChatPanel,
                     width: Binding(
@@ -178,7 +181,7 @@ struct MainWindowView: View {
                     resizable: true,
                     edge: .leading
                 ) {
-                    OrchestratorChatView()
+                    OrchestratorSidebar()
                 }
 
                 // Center: idle hero. Active orchestration view (transition target

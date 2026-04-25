@@ -45,6 +45,14 @@ final class SnapshotTests: XCTestCase {
         try render(view, size: CGSize(width: 1000, height: 640), to: "02-hero-idle.png")
     }
 
+    func test_03_OrchestratorSidebar() throws {
+        let view = OrchestratorSidebar(snapshotCursorOn: true)
+            .frame(width: 320, height: 720)
+            .background(Theme.Color.void)
+
+        try render(view, size: CGSize(width: 320, height: 720), to: "03-orchestrator-sidebar.png")
+    }
+
     // MARK: - Helpers
 
     private func render<V: View>(_ view: V, size: CGSize, to filename: String) throws {
