@@ -184,13 +184,18 @@ struct MainWindowView: View {
                     OrchestratorSidebar()
                 }
 
-                // Center: idle hero. Active orchestration view (transition target
-                // from this idle state) is deferred to a later commit. The existing
-                // XRoadsDashboardView contains the brain-creature view (forbidden by
-                // v2 spec) and a non-conformant slot grid; both will be rebuilt in
-                // the active-state pass.
-                HeroIdleState()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Center column: status bar above, hero idle state below.
+                // Active orchestration view (transition target from idle) is
+                // deferred. The existing XRoadsDashboardView contains the
+                // brain-creature view (forbidden by v2 spec) and a non-conformant
+                // slot grid; both rebuild in the active-state pass.
+                VStack(spacing: 0) {
+                    StatusBar()
+
+                    HeroIdleState()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Cockpit Mode panel (US-004)
                 if appState.showCockpitPanel, let cockpitVM = appState.cockpitViewModel {
@@ -206,8 +211,10 @@ struct MainWindowView: View {
                 }
             }
 
-            // Bottom: Loop Configuration Panel
-            LoopConfigurationPanel()
+            // Bottom strip per spec section 8. The previous LoopConfigurationPanel
+            // surfaced an expand-to-configure UX not described in the v2 spec; the
+            // expand affordance is deferred to a sheet/popover in a later commit.
+            BottomBar()
         }
         .background(Color.bgApp)
         .overlay(

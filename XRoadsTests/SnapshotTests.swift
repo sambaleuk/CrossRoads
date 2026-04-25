@@ -53,6 +53,30 @@ final class SnapshotTests: XCTestCase {
         try render(view, size: CGSize(width: 320, height: 720), to: "03-orchestrator-sidebar.png")
     }
 
+    func test_04_StatusBar() throws {
+        let view = VStack(spacing: 0) {
+            StatusBar(snapshotShimmerOn: true)
+            StatusBar(label: "EXEC", status: "compiling layer 02 / 04",
+                      progress: 0.42, agentCount: 3, agentMax: 6,
+                      snapshotShimmerOn: true)
+        }
+        .frame(width: 1000, height: 60)
+        .background(Theme.Color.void)
+
+        try render(view, size: CGSize(width: 1000, height: 60), to: "04-status-bar.png")
+    }
+
+    func test_05_BottomBar() throws {
+        let view = VStack(spacing: 0) {
+            BottomBar()
+            BottomBar(sectionName: "LOOP SCRIPTS", counterCount: 2, counterTotal: 4, allHealthy: false)
+        }
+        .frame(width: 1000, height: 52)
+        .background(Theme.Color.void)
+
+        try render(view, size: CGSize(width: 1000, height: 52), to: "05-bottom-bar.png")
+    }
+
     // MARK: - Helpers
 
     private func render<V: View>(_ view: V, size: CGSize, to filename: String) throws {
