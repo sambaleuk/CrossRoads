@@ -37,6 +37,14 @@ final class SnapshotTests: XCTestCase {
         try render(view, size: CGSize(width: 1440, height: 30), to: "01-titlebar.png")
     }
 
+    func test_02_HeroIdleState() throws {
+        let view = HeroIdleState(snapshotScanlineSeed: 0.42)
+            .frame(width: 1000, height: 640)
+            .background(Theme.Color.void)
+
+        try render(view, size: CGSize(width: 1000, height: 640), to: "02-hero-idle.png")
+    }
+
     // MARK: - Helpers
 
     private func render<V: View>(_ view: V, size: CGSize, to filename: String) throws {

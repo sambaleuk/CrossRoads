@@ -181,23 +181,13 @@ struct MainWindowView: View {
                     OrchestratorChatView()
                 }
 
-                // Center: Dashboard with brain and slots (maximized space)
-                XRoadsDashboardView(
-                    dashboardMode: Binding(
-                        get: { appState.dashboardMode },
-                        set: { appState.dashboardMode = $0 }
-                    ),
-                    terminalSlots: Binding(
-                        get: { appState.terminalSlots },
-                        set: { appState.terminalSlots = $0 }
-                    ),
-                    orchestratorState: Binding(
-                        get: { appState.orchestratorVisualState },
-                        set: { appState.orchestratorVisualState = $0 }
-                    ),
-                    showGitPanel: false
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Center: idle hero. Active orchestration view (transition target
+                // from this idle state) is deferred to a later commit. The existing
+                // XRoadsDashboardView contains the brain-creature view (forbidden by
+                // v2 spec) and a non-conformant slot grid; both will be rebuilt in
+                // the active-state pass.
+                HeroIdleState()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Cockpit Mode panel (US-004)
                 if appState.showCockpitPanel, let cockpitVM = appState.cockpitViewModel {
