@@ -142,6 +142,10 @@ final class CockpitViewModel {
     private var cockpitBrainSession: HeadlessSession?
     /// PRD-S09: Cockpit brain process ID for lifecycle management
     private var cockpitBrainProcessId: UUID?
+    /// US-000 (B0): cross-restart singleton registry for the cockpit-brain subprocess.
+    /// Persists the OS PID to disk so a second app launch detects and terminates a leftover brain
+    /// from a crashed previous session before spawning a new one.
+    private let brainRegistry = BrainProcessRegistry()
 
     /// Task for chairman brief polling
     private var chairmanBriefTask: Task<Void, Never>?
@@ -517,6 +521,23 @@ final class CockpitViewModel {
             return
         }
 
+        // US-000 (B0) — Layer 1: in-process singleton.
+        // 5 call sites trigger this method (init, restart, wake, safety net, etc.). Without this
+        // central guard, a wakeBrain racing with a crash-restart yields two parallel spawns.
+        guard cockpitBrainSession == nil else {
+            logger.info("Cockpit brain already running for project \(projectPath) — skipping duplicate spawn")
+            return
+        }
+
+        // US-000 (B0) — Layer 2: cross-restart singleton via PID file.
+        // If the previous app crashed (or was force-quit), the brain subprocess can survive.
+        // Detect, terminate, and clean before spawning a fresh one — otherwise we double-bill
+        // API quota and create git/file race conditions between two parallel brains.
+        if let stalePid = await brainRegistry.aliveExistingPid(forProject: projectPath) {
+            logger.warning("Brain pid \(stalePid) survived from a previous app session — terminating before respawn")
+            await brainRegistry.terminateAndClear(forProject: projectPath)
+        }
+
         // Initialize orchestrator if needed
         if orchestrator == nil {
             orchestrator = ClaudeCodeOrchestrator(ptyRunner: runner)
@@ -584,6 +605,19 @@ final class CockpitViewModel {
             cockpitBrainProcessId = brainSession.processId
             brainRestartCount = 0  // Reset on successful start
 
+            // US-000 (B0): persist OS PID to disk so a future app launch can detect a survivor.
+            // Best-effort — failure to register is logged but does not abort the session
+            // (the in-memory layer-1 guard still protects this run).
+            if let osPid = await orchestrator.osPid(forSession: brainSession.processId) {
+                do {
+                    try await brainRegistry.register(pid: osPid, forProject: projectPath)
+                } catch {
+                    logger.warning("Failed to register brain pid \(osPid): \(error.localizedDescription)")
+                }
+            } else {
+                logger.warning("Could not retrieve OS pid for brain session \(brainSession.processId.uuidString) — registry not updated")
+            }
+
             // Notify observers
             NotificationCenter.default.post(name: .cockpitBrainStarted, object: nil)
             logger.info("Cockpit brain started successfully")
@@ -643,6 +677,11 @@ final class CockpitViewModel {
         await orchestrator.stopCockpitSession(processId: processId)
         cockpitBrainSession = nil
         cockpitBrainProcessId = nil
+
+        // US-000 (B0): clear PID file on graceful stop (no signal needed — orchestrator already terminated the process)
+        if let projectPath = session?.projectPath {
+            await brainRegistry.clear(forProject: projectPath)
+        }
 
         // Ingest harness proposals written by the brain during the session
         if let chatHistoryRepo, let projectPath = session?.projectPath {
@@ -764,6 +803,15 @@ final class CockpitViewModel {
     private func handleCockpitBrainTermination(exitCode: Int32) {
         cockpitBrainSession = nil
         cockpitBrainProcessId = nil
+
+        // US-000 (B0): clear PID file when the brain process exits (clean or crash).
+        // The OS PID is dead by definition here — we just remove the registry entry so
+        // the next spawn doesn't waste time on a kill(stalePid, 0) check.
+        if let projectPath = session?.projectPath {
+            Task { [brainRegistry] in
+                await brainRegistry.clear(forProject: projectPath)
+            }
+        }
 
         NotificationCenter.default.post(name: .cockpitBrainStopped, object: nil)
 

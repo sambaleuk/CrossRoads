@@ -1011,6 +1011,15 @@ actor ClaudeCodeOrchestrator {
         }
     }
 
+    /// US-000 (B0): retrieves the OS-level PID of a launched headless session.
+    /// Used by CockpitViewModel to register the cockpit-brain pid in BrainProcessRegistry
+    /// so a future app launch can detect a leftover brain process.
+    /// Returns nil if the session is not tracked or its PID is not yet assigned.
+    func osPid(forSession sessionId: UUID) async -> pid_t? {
+        guard let info = await ptyRunner.getProcessInfo(id: sessionId) else { return nil }
+        return info.pid > 0 ? info.pid : nil
+    }
+
     // MARK: - Cockpit Brain Output Parsing (PRD-S09 US-008)
 
     /// Categorizes a stream-json event from the cockpit brain into a brain entry type.
