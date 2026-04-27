@@ -73,11 +73,24 @@ struct PRDParser {
                 throw PRDParserError.unsupportedPriority(story.priority)
             }
 
+            // Preserve the per-story status from the JSON (defaults to .pending when
+            // absent or unrecognised). Without this, PRDScanner reports every story
+            // as pending until a sibling worktree merges its status — which is wrong
+            // for any flow that reads a single PRD directly (chairman context, tests).
+            let status: PRDStoryStatus = {
+                if let raw = story.status,
+                   let parsed = PRDStoryStatus(rawValue: raw) {
+                    return parsed
+                }
+                return .pending
+            }()
+
             return PRDUserStory(
                 id: story.id,
                 title: story.title,
                 description: story.description ?? "",
                 priority: priority,
+                status: status,
                 dependsOn: story.dependsOn ?? []
             )
         }
@@ -136,6 +149,7 @@ private struct RawUserStory: Decodable {
     let title: String
     let description: String?
     let priority: String
+    let status: String?
     let dependsOn: [String]?
 }
 

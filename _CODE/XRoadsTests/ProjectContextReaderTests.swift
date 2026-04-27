@@ -39,14 +39,19 @@ final class ProjectContextReaderTests: XCTestCase {
         try await runGitAt(tempDir, args: ["add", "test.txt"])
         try await runGitAt(tempDir, args: ["commit", "-m", "Update test file"])
 
-        // Write a prd.json in the temp repo
+        // Write a prd.json in the temp repo.
+        // NOTE: PRDParser requires `description` at the document root and `priority`
+        // on every user story (RawPRD / RawUserStory). Without them the parser throws
+        // .invalidData and the scanner returns []. Keep this fixture aligned with
+        // the parser's required-field contract.
         let prdContent: [String: Any] = [
             "feature_name": "Test Feature",
+            "description": "Synthetic PRD used by ProjectContextReaderTests fixtures.",
             "status": "in_progress",
             "branch": "feat/test",
             "user_stories": [
-                ["id": "US-001", "title": "Story 1", "status": "complete"],
-                ["id": "US-002", "title": "Story 2", "status": "pending"]
+                ["id": "US-001", "title": "Story 1", "priority": "high", "status": "complete"],
+                ["id": "US-002", "title": "Story 2", "priority": "medium", "status": "pending"]
             ]
         ]
         let prdData = try JSONSerialization.data(withJSONObject: prdContent, options: .prettyPrinted)
