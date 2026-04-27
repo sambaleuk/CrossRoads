@@ -61,6 +61,11 @@ extension Notification.Name {
     /// UserInfo: "slotNumber" (Int), "output" (String), "agentType" (String)
     static let cockpitSlotOutput = Notification.Name("cockpitSlotOutput")
 
+    /// Posted when the operator submits a message from the OrchestratorSidebar input.
+    /// UserInfo: "text" (String, trimmed, non-empty), "mode" (String: "api" | "terminal")
+    /// Listeners: AppState / CockpitViewModel — wakes the brain or routes to a terminal slot.
+    static let orchestratorChatSubmit = Notification.Name("orchestratorChatSubmit")
+
     /// Posted when a cockpit-launched agent terminates.
     /// UserInfo: "slotNumber" (Int), "exitCode" (Int32)
     static let cockpitSlotTerminated = Notification.Name("cockpitSlotTerminated")
