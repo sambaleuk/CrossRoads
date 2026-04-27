@@ -42,7 +42,7 @@ actor ChatHistoryRepository {
     func fetchHistory(sessionId: UUID, limit: Int = 200) throws -> [ChatHistoryEntry] {
         try dbQueue.read { db in
             try ChatHistoryEntry
-                .filter(ChatHistoryEntry.Columns.sessionId == sessionId.uuidString)
+                .filter(ChatHistoryEntry.Columns.sessionId == sessionId)
                 .order(ChatHistoryEntry.Columns.createdAt.asc)
                 .limit(limit)
                 .fetchAll(db)
@@ -104,7 +104,7 @@ actor ChatHistoryRepository {
 
             if let sessionId {
                 query = CockpitWakePrompt
-                    .filter(CockpitWakePrompt.Columns.sessionId == sessionId.uuidString)
+                    .filter(CockpitWakePrompt.Columns.sessionId == sessionId)
                     .order(CockpitWakePrompt.Columns.createdAt.desc)
                     .limit(1)
             }
@@ -177,7 +177,7 @@ actor ChatHistoryRepository {
     /// Mark a proposal as applied and optionally record its impact.
     func markApplied(id: UUID, impact: String? = nil) throws {
         try dbQueue.write { db in
-            if var iteration = try HarnessIteration.fetchOne(db, key: id.uuidString) {
+            if var iteration = try HarnessIteration.fetchOne(db, key: id) {
                 iteration.applied = true
                 iteration.impact = impact
                 try iteration.update(db)
