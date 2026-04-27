@@ -6,7 +6,14 @@ import AppKit
 @MainActor
 final class SnapshotTests: XCTestCase {
 
-    private let outputDir = "/Users/bigouz/Xroads/.screenshots"
+    // US-007: per-user temp path so SnapshotTests run on any machine.
+    // Replaces a previously hardcoded developer-home path that failed with
+    // Permission denied on every other account and leaked the username via
+    // MCP CHATTER scan logs.
+    private let outputDir = FileManager.default
+        .temporaryDirectory
+        .appendingPathComponent("xroads-snapshots", isDirectory: true)
+        .path
 
     override func setUp() async throws {
         try FileManager.default.createDirectory(
