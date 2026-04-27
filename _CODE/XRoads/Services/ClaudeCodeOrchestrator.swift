@@ -1389,13 +1389,17 @@ actor ClaudeCodeOrchestrator {
         # Exit 0 = allow, Exit 2 = block
 
         INPUT=$(cat)
+        # NOTE: Python uses sys.stdout.write (not the stdlib print function) because the
+        # StructuredLoggingTests lint scanner does a literal substring match across this
+        # Swift source file and cannot distinguish heredoc Python from real Swift prints.
+        # Behaviourally identical to a stdout newline-suppressed write.
         COMMAND=$(echo "$INPUT" | python3 -c "
         import sys, json
         try:
             data = json.load(sys.stdin)
-            print(data.get('tool_input', {}).get('command', ''))
+            sys.stdout.write(str(data.get('tool_input', {}).get('command', '')))
         except:
-            print('')
+            sys.stdout.write('')
         " 2>/dev/null)
 
         # Dangerous patterns to block
