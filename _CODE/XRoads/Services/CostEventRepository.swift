@@ -72,9 +72,13 @@ actor CostEventRepository {
     /// Fetches all cost events for a session (via slot join).
     func fetchEventsForSession(sessionId: UUID) throws -> [CostEvent] {
         try dbQueue.read { db in
+            // NB: previously this used `.select(Columns.id).fetchAll(db)` then
+            // `map(\.id)`, which decodes back to `AgentSlot` and fails because
+            // only the id column was selected ("column not found: cockpitSessionId").
+            // Match the working pattern used by summaryForSession: fetch the rows
+            // and map by id in Swift.
             let slotIds = try AgentSlot
                 .filter(AgentSlot.Columns.cockpitSessionId == sessionId)
-                .select(AgentSlot.Columns.id)
                 .fetchAll(db)
                 .map(\.id)
 

@@ -5,7 +5,7 @@ import SwiftUI
 /// Phase 5: Budget control settings — presets, thresholds, throttle, daily limits.
 public struct BudgetSettingsView: View {
 
-    @AppStorage("budgetPreset") private var budgetPreset = "Standard"
+    @AppStorage("budgetPreset") private var budgetPreset = BudgetPreset.standard.id
     @AppStorage("budgetWarningPct") private var warningPct = 80
     @AppStorage("budgetHardStop") private var hardStop = true
     @AppStorage("budgetThrottle") private var throttle = true
@@ -38,10 +38,10 @@ public struct BudgetSettingsView: View {
 
     private var presetSection: some View {
         Section {
-            ForEach(BudgetPreset.allCases, id: \.self) { preset in
+            ForEach(BudgetPreset.builtin) { preset in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(preset.displayName)
+                        Text(preset.name)
                             .font(.system(size: 13, weight: .semibold, design: .monospaced))
                             .foregroundStyle(Color.textPrimary)
                         Text(preset.description)
@@ -51,18 +51,18 @@ public struct BudgetSettingsView: View {
 
                     Spacer()
 
-                    Text(preset.budgetDisplay)
+                    Text(BudgetSettingsView.budgetDisplay(for: preset))
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color.textSecondary)
 
-                    if budgetPreset == preset.rawValue {
+                    if budgetPreset == preset.id {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(Color.accentPrimary)
                     }
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    budgetPreset = preset.rawValue
+                    budgetPreset = preset.id
                     applyPreset(preset)
                 }
             }
@@ -162,7 +162,7 @@ public struct BudgetSettingsView: View {
         Section {
             Button(role: .destructive) {
                 applyPreset(.standard)
-                budgetPreset = "Standard"
+                budgetPreset = BudgetPreset.standard.id
             } label: {
                 HStack {
                     Image(systemName: "arrow.counterclockwise")
@@ -179,46 +179,22 @@ public struct BudgetSettingsView: View {
         warningPct = preset.warningPct
         hardStop = preset.hardStop
         throttle = preset.throttle
-    }
-}
-
-// MARK: - BudgetPreset
-
-enum BudgetPreset: String, CaseIterable {
-    case frugal = "Frugal"
-    case standard = "Standard"
-    case performance = "Performance"
-    case unlimited = "Unlimited"
-
-    var displayName: String { rawValue }
-
-    var description: String {
-        switch self {
-        case .frugal: return "Sonnet-only recommended, tight caps"
-        case .standard: return "Mixed models, balanced spending"
-        case .performance: return "Opus allowed, generous caps"
-        case .unlimited: return "No caps, monitoring only"
+        // Daily limit is optional on a preset — preserve user override when nil.
+        if let daily = preset.dailyLimitCents {
+            dailyLimitCents = daily
         }
     }
 
-    var budgetDisplay: String {
-        switch self {
-        case .frugal: return "$5"
-        case .standard: return "$25"
-        case .performance: return "$100"
-        case .unlimited: return "∞"
+    /// Picker-friendly currency label for a preset.
+    /// Renders the unlimited sentinel as "∞" to keep the UI honest.
+    fileprivate static func budgetDisplay(for preset: BudgetPreset) -> String {
+        if preset.id == BudgetPreset.unlimited.id {
+            return "∞"
         }
-    }
-
-    var warningPct: Int {
-        switch self {
-        case .frugal: return 70
-        case .standard: return 80
-        case .performance: return 85
-        case .unlimited: return 95
+        let dollars = Double(preset.budgetCents) / 100.0
+        if dollars >= 1 && dollars.truncatingRemainder(dividingBy: 1) == 0 {
+            return "$\(Int(dollars))"
         }
+        return String(format: "$%.2f", dollars)
     }
-
-    var hardStop: Bool { self != .unlimited }
-    var throttle: Bool { self != .unlimited }
 }
