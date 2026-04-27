@@ -6,6 +6,9 @@ Everything not in `next-release.md`. Ordered by priority within each bucket.
 
 | Item | Value in one line | Rough size |
 |------|-------------------|-----------|
+| **B1** — Orchestrator chat input doesn't submit (Enter & cmd+Enter both no-op; text stays in field) — `OrchestratorSidebar.swift` / `OrchestratorInput` | Core entry point is dead; users can't talk to the orchestrator | M (focus + key handler debug) |
+| **B2** — RVW Ribbon (cmd+⇧R) takes the full window, hides the custom TitleBar, and the native macOS menu bar reappears — breaks the "tactical custom chrome" design | Reverses Ousmane's full visual identity work the moment review is opened | M (layout: ribbon should overlay or stack, not replace) |
+| **B3** — RVW Ribbon toggle off is unreliable: cmd+⇧R doesn't close it when focus is elsewhere; visible top-right X button doesn't dismiss either | Users can get stuck in review with no clean exit | S (route close action through any focus state) |
 | Deprecation cleanup: migrate ~80 call sites from old shims (`Color.textPrimary`, `.body14`, `Color.bgApp`, …) to locked tokens (`Theme.Color.ink`, `Theme.TextStyle.body`, `Theme.Color.void`, …) | Removes build-time warnings; locks every callsite on the v2 visual system Ousmane shipped | M (mechanical, ~80 sites across ~15 views) |
 | Rebuild deferred views to spec: `XRoadsDashboardView` (brain-creature + slot grid) and `LoopConfigurationPanel` — both still in tree but unmounted from `MainWindowView` | Restores live operations UI after the 2026-04 visual identity refactor | L (real design + impl) |
 
@@ -19,6 +22,9 @@ Everything not in `next-release.md`. Ordered by priority within each bucket.
 | **R4** — RVW badge count "3" competes with label, both in voltage — voltage only on count, label stays default (`TitleBar.swift`) | Restores label/value visual hierarchy | XS |
 | **R5** — `StatusPip` at 3×9px — green `.connected` hard to distinguish from yellow at that size (`Theme.swift` L204) — bump to 4×9px minimum | Improves status legibility | XS |
 | **R6** — Crosshair arms subtle at 120px hero size — bump opacity 0.45 → 0.55 for `size ≥ 80` (`BrandMarkPlaceholder.swift` L26,31) | Restores reticle presence at hero size | XS |
+| **B4** — Only 3 of 11 toolbar buttons (ORC/CKP/RVW) have `keyboardShortcut`; RUN/INSP/PRD/HIST/INTEL/SKL/ART/SET are mouse-only — `TitleBar.swift` | Handoff promised 11 shortcuts; missing 8 limits keyboard-driven workflow | S (8× `.keyboardShortcut(...)` calls) |
+| **B6** — Hardcoded `/Users/bigouz/...` path appears in MCP CHATTER ("Scanning for PRDs in /Users/bigouz/Documents…") on a non-bigouz machine | Leaks dev machine info; breaks portability | XS (find & replace with dynamic path resolution) |
+| **B7** — `cmd+W` closes the main window AND quits the app entirely (no main-window-back pattern) — `XRoadsApp.swift` L133 | Surprising for users used to standard macOS behaviour where window can be reopened from menu | S (reopen via View menu or auto-restore) |
 
 ## Nice (someday / maybe)
 
