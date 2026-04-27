@@ -6,6 +6,7 @@ Everything not in `next-release.md`. Ordered by priority within each bucket.
 
 | Item | Value in one line | Rough size |
 |------|-------------------|-----------|
+| **B0** 🔴🔴 — `CockpitBrainService` spawns multiple parallel `claude --agent cockpit-brain` instances on the same project (3 observed simultaneously, each with `--max-turns 100 --dangerously-skip-permissions`). No singleton check, no PID tracking. Burns API quota and creates race conditions on git/files. | Stop-the-world bug: every session leak multiplies cost and risks corrupting state. Highest priority. | M (PID file + lock check before spawn, kill stale on app restart) |
 | **B1** — Orchestrator chat input doesn't submit (Enter & cmd+Enter both no-op; text stays in field) — `OrchestratorSidebar.swift` / `OrchestratorInput` | Core entry point is dead; users can't talk to the orchestrator | M (focus + key handler debug) |
 | **B2** — RVW Ribbon (cmd+⇧R) takes the full window, hides the custom TitleBar, and the native macOS menu bar reappears — breaks the "tactical custom chrome" design | Reverses Ousmane's full visual identity work the moment review is opened | M (layout: ribbon should overlay or stack, not replace) |
 | **B3** — RVW Ribbon toggle off is unreliable: cmd+⇧R doesn't close it when focus is elsewhere; visible top-right X button doesn't dismiss either | Users can get stuck in review with no clean exit | S (route close action through any focus state) |
